@@ -39,6 +39,7 @@ function App() {
   const [birthday, setBirthday] = useState<BirthdayData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // URL パラメータからアドレスを取得
   useEffect(() => {
@@ -188,6 +189,13 @@ function App() {
     setError(null);
   };
 
+  const handleShare = () => {
+    const url = `${window.location.origin}/?address=${address}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   return (
     <div style={styles.container}>
       {/* ヘッダー */}
@@ -293,6 +301,20 @@ function App() {
               {birthday.txHash.slice(0, 10)}...{birthday.txHash.slice(-8)}
             </a>
           </div>
+
+          <div style={styles.shareSection}>
+            <button onClick={handleShare} style={styles.shareButton}>
+              🔗 Share
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* トースト表示 */}
+      {copied && (
+        <div style={styles.toast}>
+          <span style={styles.toastIcon}>✅</span>
+          <span>Link copied!</span>
         </div>
       )}
 
@@ -521,6 +543,48 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '14px 0',
     borderBottom: '1px dashed #f7b3c7',
     textAlign: 'center',
+  },
+  shareSection: {
+    textAlign: 'center',
+    marginTop: '20px',
+    paddingTop: '20px',
+    borderTop: '1px dashed #f7b3c7',
+  },
+  shareButton: {
+    padding: '10px 20px',
+    fontSize: '0.85rem',
+    fontWeight: '600',
+    background: 'linear-gradient(135deg, #f9aec7 0%, #f78fb3 100%)',
+    border: 'none',
+    borderRadius: '12px',
+    color: '#ffffff',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    transition: 'transform 0.2s, opacity 0.2s',
+  },
+  toast: {
+    position: 'fixed',
+    bottom: '100px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    padding: '14px 28px',
+    background: '#ffffff',
+    border: '2px solid #f9aec7',
+    borderRadius: '16px',
+    fontSize: '0.9rem',
+    color: '#886677',
+    fontWeight: '600',
+    boxShadow: '0 4px 20px rgba(249, 174, 199, 0.3)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    zIndex: 1000,
+    animation: 'fadeIn 0.2s ease-out',
+  },
+  toastIcon: {
+    fontSize: '1.1rem',
   },
   birthdayLabel: {
     display: 'block',
