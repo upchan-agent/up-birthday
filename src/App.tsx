@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createClientUPProvider } from '@lukso/up-provider';
+import { createClientUPProvider, type UPProvider } from '@lukso/up-provider';
 import { createPublicClient, http, parseAbi, defineChain } from 'viem';
 
 const IPFS_GATEWAY = 'https://api.universalprofile.cloud/ipfs/';
@@ -39,9 +39,6 @@ interface BirthdayData {
   txUrl: string;
 }
 
-// Provider インスタンスは 1 つだけ作成（コンポーネント外）
-const provider = typeof window !== 'undefined' ? createClientUPProvider() : null;
-
 function App() {
   const [address, setAddress] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -49,10 +46,12 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
+  const [providerReady, setProviderReady] = useState(false);
 
   const log = useCallback((msg: string, data?: any) => {
+    const logMsg = `[${new Date().toLocaleTimeString()}] ${msg}`;
     console.log('[UP Birthday]', msg, data || '');
-    setDebugInfo(prev => [...prev.slice(-4), `[${new Date().toLocaleTimeString()}] ${msg}`]);
+    setDebugInfo(prev => [...prev.slice(-9), logMsg + (data ? `: ${JSON.stringify(data).slice(0, 50)}` : '')]);
   }, []);
 
   const fetchProfile = useCallback(async (addr: string) => {
@@ -163,58 +162,84 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!provider) {
-      log('Provider not available');
-      return;
-    }
+    log('=== App mounted ===');
 
-    log('Initializing provider...');
+    // Provider 初期化を遅延させる
+    const initProvider = async () => {
+      log('Creating provider...');
+      
+      // 少し待ってから初期化（Grid からのメッセージを待つ）
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const provider: UPProvider = createClientUPProvider();
+      
+      log('Provider created');
+      log('Provider type:', typeof provider);
+      log('Provider accounts:', provider.accounts);
+      log('Provider contextAccounts:', provider.contextAccounts);
+      log('Provider ready:', provider.ready);
 
-    // 初期状態を取得
-    const accounts = provider.accounts as string[];
-    const contextAccounts = provider.contextAccounts as string[];
+      // アドレスを取得
+      const accounts = provider.accounts as string[];
+      const contextAccounts = provider.contextAccounts as string[];
 
-    log('Initial accounts:', accounts);
-    log('Initial contextAccounts:', contextAccounts);
+      log('Accounts array:', accounts);
+      log('Context array:', contextAccounts);
+      log('Accounts length:', accounts?.length);
+      log('Context length:', contextAccounts?.length);
 
-    const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
+      const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
 
-    if (upAddress) {
-      log('Using address:', upAddress);
-      setAddress(upAddress);
-      fetchProfile(upAddress);
-      fetchBirthday(upAddress);
-    } else {
-      log('No address available');
-    }
+      log('Selected address:', upAddress);
 
-    // イベントリスナー
-    const handleAccountsChanged = (newAccounts: string[]) => {
-      log('accountsChanged:', newAccounts);
-      if (newAccounts.length > 0) {
-        setAddress(newAccounts[0]);
-        fetchProfile(newAccounts[0]);
-        fetchBirthday(newAccounts[0]);
+      if (upAddress) {
+        setAddress(upAddress);
+        fetchProfile(upAddress);
+        fetchBirthday(upAddress);
+      } else {
+        log('⚠️ No address available!');
+        log('Checking if in iframe...');
+        log('window === window.parent:', window === window.parent);
+        log('window.location.ancestorOrigins:', Array.from(window.location.ancestorOrigins || []));
       }
+
+      // イベントリスナー
+      const handleAccountsChanged = (newAccounts: string[]) => {
+        log('accountsChanged:', newAccounts);
+        if (newAccounts.length > 0) {
+          setAddress(newAccounts[0]);
+          fetchProfile(newAccounts[0]);
+          fetchBirthday(newAccounts[0]);
+        }
+      };
+
+      const handleContextAccountsChanged = (newContextAccounts: string[]) => {
+        log('contextAccountsChanged:', newContextAccounts);
+        if (newContextAccounts.length > 0) {
+          setAddress(newContextAccounts[0]);
+          fetchProfile(newContextAccounts[0]);
+          fetchBirthday(newContextAccounts[0]);
+        }
+      };
+
+      provider.on('accountsChanged', handleAccountsChanged);
+      provider.on('contextAccountsChanged', handleContextAccountsChanged);
+
+      setProviderReady(true);
+      log('Provider ready!');
+
+      // クリーンアップ
+      return () => {
+        log('Cleaning up event listeners...');
+        provider.removeListener('accountsChanged', handleAccountsChanged);
+        provider.removeListener('contextAccountsChanged', handleContextAccountsChanged);
+      };
     };
 
-    const handleContextAccountsChanged = (newContextAccounts: string[]) => {
-      log('contextAccountsChanged:', newContextAccounts);
-      if (newContextAccounts.length > 0) {
-        setAddress(newContextAccounts[0]);
-        fetchProfile(newContextAccounts[0]);
-        fetchBirthday(newContextAccounts[0]);
-      }
-    };
+    const cleanup = initProvider();
 
-    provider.on('accountsChanged', handleAccountsChanged);
-    provider.on('contextAccountsChanged', handleContextAccountsChanged);
-
-    // クリーンアップ
     return () => {
-      log('Cleaning up event listeners...');
-      provider.removeListener('accountsChanged', handleAccountsChanged);
-      provider.removeListener('contextAccountsChanged', handleContextAccountsChanged);
+      cleanup.then(fn => fn?.());
     };
   }, [fetchProfile, fetchBirthday, log]);
 
@@ -225,10 +250,17 @@ function App() {
       </h2>
 
       {/* デバッグ情報 */}
-      <div style={{ marginBottom: '20px', padding: '10px', background: 'rgba(255,0,85,0.1)', borderRadius: '8px', fontSize: '0.7rem', fontFamily: 'monospace' }}>
+      <div style={{ marginBottom: '20px', padding: '10px', background: 'rgba(255,0,85,0.1)', borderRadius: '8px', fontSize: '0.65rem', fontFamily: 'monospace', maxHeight: '300px', overflowY: 'auto' }}>
         <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Debug Log:</div>
+        <div style={{ color: providerReady ? '#4ade80' : '#fbbf24' }}>
+          Provider Ready: {providerReady ? '✅ Yes' : '⏳ Loading...'}
+        </div>
+        <div style={{ color: address ? '#4ade80' : '#ef4444' }}>
+          Address: {address || '❌ Not set'}
+        </div>
+        <hr style={{ margin: '8px 0', borderColor: 'rgba(255,255,255,0.2)' }} />
         {debugInfo.map((line, i) => (
-          <div key={i}>{line}</div>
+          <div key={i} style={{ marginBottom: '2px' }}>{line}</div>
         ))}
       </div>
 
