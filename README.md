@@ -4,10 +4,14 @@
 
 ## 特徴 ✨
 
-- 🌈 RainbowKit による Universal Profile 接続
-- 🔗 接続後に自動的に作成日を取得・表示
-- ⛓️ LUKSO メインネット対応
+- 📱 UniversalEverything Grid で自動検出
+- 🔍 手動入力も可能
+- ⛓️ LUKSO Indexer API で高速取得
 - 🚀 Vercel で即デプロイ可能
+
+## デモ 🌐
+
+https://up-birthday.vercel.app
 
 ## 始め方 🚀
 
@@ -24,17 +28,7 @@ cd up-birthday
 npm install
 ```
 
-### 3. 環境変数の設定
-
-```bash
-cp .env.example .env
-```
-
-`.env` ファイルの `VITE_WALLETCONNECT_PROJECT_ID` を編集：
-- https://cloud.walletconnect.com で Project ID を取得
-- `.env` ファイルに貼り付け
-
-### 4. 開発サーバーの起動
+### 3. 開発サーバーの起動
 
 ```bash
 npm run dev
@@ -51,20 +45,24 @@ npm install -g vercel
 vercel --prod
 ```
 
-環境変数の設定を忘れずに：
-1. Vercel ダッシュボードを開く
-2. プロジェクト設定 → Environment Variables
-3. `VITE_WALLETCONNECT_PROJECT_ID` を追加
-
 ## 技術スタック 📦
 
 - **React 19** - UI フレームワーク
 - **TypeScript** - 型安全な開発
 - **Vite** - ビルドツール
-- **RainbowKit** - ウォレット接続 UI
-- **Wagmi** - React Hooks for Ethereum
-- **Viem** - ブロックチェーンインターフェース
-- **TanStack Query** - 状態管理
+- **@lukso/up-provider** - Universal Profile 接続
+- **graphql-request** - LUKSO Indexer API クライアント
+
+## 使い方 💡
+
+### UniversalEverything Grid
+UniversalEverything の Grid にミニアプリとして追加すると、自動的に UP が検出されます。
+
+### 手動入力
+アドレスを直接入力して Check ボタンをクリック。
+
+### URL 共有
+`?address=0x...` を URL に追加して共有可能。
 
 ## ライセンス
 
