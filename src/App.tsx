@@ -205,8 +205,7 @@ function App() {
       {/* アドレス入力フォーム（常に表示） */}
       <div style={styles.inputSection}>
         <p style={styles.inputLabel}>
-          Auto-detected via UniversalEverything Grid<br />
-          or enter your address manually
+          Auto-detected via Grid or enter manually
         </p>
         <div style={styles.inputGroup}>
           <input
@@ -266,7 +265,7 @@ function App() {
           </div>
 
           <button onClick={handleReset} style={styles.resetButtonSmall}>
-            🔍 Clear
+            Clear
           </button>
         </div>
       )}
@@ -277,8 +276,11 @@ function App() {
           <div style={styles.birthdayHeader}>
             <div style={styles.birthdayTitleWrapper}>
               <span style={styles.birthdayCake}>🎂</span>
-              <span style={styles.birthdayTitle}>Created</span>
+              <span style={styles.birthdayTitle}>Happy Birthday!</span>
             </div>
+            <p style={styles.birthdaySubtitle}>
+              Your Universal Profile was born on ✨
+            </p>
           </div>
 
           <div style={styles.birthdayItem}>
@@ -376,12 +378,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxSizing: 'border-box',
   },
   inputLabel: {
-    margin: '0 0 20px 0',
-    fontSize: '0.95rem',
-    color: '#665566',
+    margin: '0 0 16px 0',
+    fontSize: '0.85rem',
+    color: '#886677',
     textAlign: 'center',
     fontWeight: '500',
-    lineHeight: 1.6,
+    lineHeight: 1.5,
   },
   inputGroup: {
     display: 'flex',
@@ -527,15 +529,16 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   resetButtonSmall: {
     width: '100%',
-    padding: '14px',
-    fontSize: '0.95rem',
-    fontWeight: '600',
-    background: '#f7b3c7',
-    border: '2px solid #f78fb3',
+    padding: '16px 32px',
+    fontSize: '1rem',
+    fontWeight: '700',
+    background: '#f78fb3',
+    border: 'none',
     borderRadius: '14px',
-    color: '#c46b8a',
+    color: '#ffffff',
     cursor: 'pointer',
-    transition: 'background 0.2s',
+    transition: 'transform 0.2s, box-shadow 0.2s',
+    boxShadow: '0 4px 16px rgba(247, 143, 179, 0.25)',
   },
   birthdayCard: {
     maxWidth: '520px',
@@ -555,20 +558,28 @@ const styles: { [key: string]: React.CSSProperties } = {
   birthdayTitleWrapper: {
     display: 'inline-flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '10px',
-    padding: '10px 20px',
-    background: '#ffffff',
+    padding: '12px 24px',
+    background: '#f78fb3',
     borderRadius: '20px',
-    border: '2px solid #f7b3c7',
+    border: '2px solid #f78fb3',
+    marginBottom: '12px',
   },
   birthdayCake: {
-    fontSize: '1.6rem',
+    fontSize: '1.4rem',
   },
   birthdayTitle: {
-    fontSize: '1.2rem',
+    fontSize: '1.1rem',
     fontWeight: '700',
-    color: '#f78fb3',
+    color: '#ffffff',
     letterSpacing: '0.02em',
+  },
+  birthdaySubtitle: {
+    margin: 0,
+    fontSize: '0.9rem',
+    color: '#886677',
+    fontWeight: '500',
   },
   birthdayItem: {
     padding: '18px 0',
