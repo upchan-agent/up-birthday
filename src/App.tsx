@@ -12,6 +12,7 @@ const GET_PROFILE_QUERY = gql`
       fullName
       profileImages(where: { error: { _is_null: true } }) {
         width
+        height
         url
       }
     }
@@ -39,6 +40,11 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'grid' | 'manual' | 'url'>('manual');
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+
+  const addLog = (msg: string) => {
+    setDebugLog(prev => [...prev.slice(-4), `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  };
 
   // URL パラメータからアドレスを取得
   useEffect(() => {
@@ -47,8 +53,11 @@ function App() {
     if (addrParam && addrParam.startsWith('0x')) {
       setAddress(addrParam.toLowerCase() as `0x${string}`);
       setMode('url');
+      addLog(`URL mode: ${addrParam}`);
       fetchProfile(addrParam);
       fetchBirthday(addrParam);
+    } else {
+      addLog('No URL parameter');
     }
   }, []);
 
@@ -59,16 +68,21 @@ function App() {
     const accounts = provider.accounts as string[];
     const contextAccounts = provider.contextAccounts as string[];
 
+    addLog(`Grid accounts: ${accounts?.length || 0}`);
+    addLog(`Grid context: ${contextAccounts?.length || 0}`);
+
     const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
 
     if (upAddress && !address) {
       setAddress(upAddress);
       setMode('grid');
+      addLog(`Grid mode: ${upAddress}`);
       fetchProfile(upAddress);
       fetchBirthday(upAddress);
     }
 
     const handleAccountsChanged = (newAccounts: string[]) => {
+      addLog(`accountsChanged: ${newAccounts}`);
       if (newAccounts.length > 0 && !address) {
         setAddress(newAccounts[0]);
         setMode('grid');
@@ -78,6 +92,7 @@ function App() {
     };
 
     const handleContextAccountsChanged = (newContextAccounts: string[]) => {
+      addLog(`contextAccountsChanged: ${newContextAccounts}`);
       if (newContextAccounts.length > 0 && !address) {
         setAddress(newContextAccounts[0]);
         setMode('grid');
@@ -98,26 +113,40 @@ function App() {
   const fetchProfile = async (addr: string) => {
     setLoading(true);
     setError(null);
+    addLog(`Fetching profile: ${addr}`);
     try {
       const data = await request(GRAPHQL_ENDPOINT, GET_PROFILE_QUERY, { address: addr.toLowerCase() });
+      addLog(`Indexer response: ${JSON.stringify(data).slice(0, 200)}`);
+      
       const profileData = data.Profile?.[0];
 
       if (!profileData) {
+        addLog('No profile data found');
         setProfile({ name: 'Unknown' });
         return;
       }
 
+      addLog(`Profile name: ${profileData.fullName || profileData.name}`);
+      addLog(`Profile images: ${profileData.profileImages?.length || 0}`);
+
       // 画像の選択：最小サイズ（アイコン用）
       const images = profileData.profileImages || [];
-      const avatarUrl = images.length > 0
-        ? images.sort((a: any, b: any) => a.width - b.width)[0].url
-        : undefined;
+      let avatarUrl: string | undefined;
+      
+      if (images.length > 0) {
+        const sorted = [...images].sort((a, b) => (a.width || 0) - (b.width || 0));
+        avatarUrl = sorted[0].url;
+        addLog(`Selected image: ${avatarUrl} (${sorted[0].width}x${sorted[0].height})`);
+      } else {
+        addLog('No images available');
+      }
 
       setProfile({
         name: profileData.fullName || profileData.name || 'Unknown',
         avatarUrl,
       });
-    } catch (e) {
+    } catch (e: any) {
+      addLog(`Profile fetch error: ${e.message || e}`);
       console.error('Profile fetch error:', e);
       setProfile({ name: 'Unknown' });
     } finally {
@@ -151,8 +180,8 @@ function App() {
         txHash,
         txUrl: `https://explorer.execution.mainnet.lukso.network/tx/${txHash}`,
       });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
+    } catch (e: any) {
+      setError(e.message || 'Unknown error');
     }
   };
 
@@ -174,6 +203,7 @@ function App() {
     setProfile(null);
     setBirthday(null);
     setError(null);
+    setDebugLog([]);
     setMode('manual');
   };
 
@@ -182,7 +212,7 @@ function App() {
       {/* ヘッダー */}
       <div style={styles.header}>
         <h1 style={styles.title}>
-          <span style={{ fontFamily: '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif' }}>🆙</span> Birthday
+          <span role="img" aria-label="up" style={styles.emoji}>🆙</span> Birthday
         </h1>
         <p style={styles.subtitle}>
           {mode === 'grid' && '📱 Grid Mode'}
@@ -190,6 +220,16 @@ function App() {
           {mode === 'url' && '🔗 Shared Mode'}
         </p>
       </div>
+
+      {/* デバッグログ（開発用） */}
+      {debugLog.length > 0 && (
+        <div style={styles.debugLog}>
+          <div style={styles.debugTitle}>Debug Log:</div>
+          {debugLog.map((line, i) => (
+            <div key={i} style={styles.debugLine}>{line}</div>
+          ))}
+        </div>
+      )}
 
       {/* アドレス入力フォーム（Grid/URL 以外） */}
       {!address && mode === 'manual' && (
@@ -243,8 +283,10 @@ function App() {
                 alt={profile.name}
                 style={styles.avatar}
                 onError={(e) => {
+                  addLog(`Image load error: ${profile.avatarUrl}`);
                   (e.target as HTMLImageElement).style.display = 'none';
                 }}
+                onLoad={() => addLog(`Image loaded: ${profile.avatarUrl}`)}
               />
             ) : (
               <div style={styles.avatarPlaceholder}>
@@ -318,10 +360,13 @@ function App() {
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     minHeight: '100vh',
+    width: '100%',
     padding: '24px 16px',
     fontFamily: 'system-ui, -apple-system, sans-serif',
     background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%)',
     color: '#ffffff',
+    overflowX: 'hidden',
+    boxSizing: 'border-box',
   },
   header: {
     textAlign: 'center',
@@ -329,19 +374,46 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   title: {
     margin: '0 0 8px 0',
-    fontSize: '2.5rem',
+    fontSize: 'clamp(1.8rem, 5vw, 2.5rem)',
     fontWeight: '800',
     background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 50%, #ff0055 100%)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     backgroundClip: 'text',
     letterSpacing: '-0.02em',
+    display: 'inline-block',
+  },
+  emoji: {
+    fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
+    fontVariantEmoji: 'emoji',
   },
   subtitle: {
     margin: 0,
     fontSize: '0.9rem',
     color: '#8888aa',
     fontWeight: '500',
+  },
+  debugLog: {
+    maxWidth: '500px',
+    margin: '0 auto 20px',
+    padding: '12px 16px',
+    background: 'rgba(255, 0, 85, 0.1)',
+    borderRadius: '12px',
+    border: '1px solid rgba(255, 0, 85, 0.2)',
+    fontSize: '0.7rem',
+    fontFamily: 'monospace',
+    color: '#ff6b9d',
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
+  },
+  debugTitle: {
+    fontWeight: 'bold',
+    marginBottom: '6px',
+    opacity: 0.8,
+  },
+  debugLine: {
+    marginBottom: '2px',
+    whiteSpace: 'nowrap',
   },
   inputSection: {
     maxWidth: '500px',
@@ -350,19 +422,24 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'rgba(255, 255, 255, 0.03)',
     borderRadius: '20px',
     border: '1px solid rgba(255, 255, 255, 0.08)',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   inputLabel: {
     margin: '0 0 16px 0',
     fontSize: '0.95rem',
     color: '#aaaacc',
     textAlign: 'center',
+    wordBreak: 'break-word',
   },
   inputGroup: {
     display: 'flex',
     gap: '12px',
+    flexWrap: 'wrap',
   },
   input: {
-    flex: 1,
+    flex: '1 1 200px',
+    minWidth: '200px',
     padding: '14px 18px',
     fontSize: '0.9rem',
     fontFamily: 'monospace',
@@ -372,6 +449,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#ffffff',
     outline: 'none',
     transition: 'border-color 0.2s',
+    boxSizing: 'border-box',
   },
   button: {
     padding: '14px 28px',
@@ -384,12 +462,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'transform 0.2s, box-shadow 0.2s',
     whiteSpace: 'nowrap',
+    flexShrink: 0,
   },
   hint: {
     margin: '16px 0 0 0',
     fontSize: '0.8rem',
     color: '#666688',
     textAlign: 'center',
+    wordBreak: 'break-word',
   },
   code: {
     background: 'rgba(255, 255, 255, 0.1)',
@@ -427,15 +507,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
+    flexWrap: 'wrap',
   },
   errorIcon: {
     fontSize: '1.5rem',
   },
   errorText: {
     margin: 0,
-    flex: 1,
+    flex: '1 1 auto',
     color: '#ff6b9d',
     fontSize: '0.95rem',
+    minWidth: '200px',
   },
   resetButton: {
     padding: '10px 20px',
@@ -455,12 +537,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'rgba(255, 255, 255, 0.03)',
     borderRadius: '20px',
     border: '1px solid rgba(255, 255, 255, 0.08)',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   profileHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: '16px',
     marginBottom: '20px',
+    flexWrap: 'nowrap',
   },
   avatar: {
     width: '64px',
@@ -468,6 +553,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '50%',
     objectFit: 'cover',
     border: '3px solid rgba(255, 0, 85, 0.3)',
+    flexShrink: 0,
   },
   avatarPlaceholder: {
     width: '64px',
@@ -481,9 +567,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 'bold',
     color: '#ffffff',
     border: '3px solid rgba(255, 255, 255, 0.2)',
+    flexShrink: 0,
   },
   profileInfo: {
     flex: 1,
+    minWidth: 0,
   },
   profileLabel: {
     fontSize: '0.75rem',
@@ -494,6 +582,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.3rem',
     fontWeight: '700',
     color: '#ffffff',
+    wordBreak: 'break-word',
   },
   addressBox: {
     padding: '14px 18px',
@@ -535,6 +624,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'linear-gradient(135deg, rgba(255, 0, 85, 0.08) 0%, rgba(255, 107, 157, 0.05) 100%)',
     borderRadius: '20px',
     border: '1px solid rgba(255, 0, 85, 0.2)',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   birthdayHeader: {
     display: 'flex',
@@ -566,6 +657,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     color: '#ffffff',
     fontWeight: '500',
+    wordBreak: 'break-word',
   },
   txLink: {
     display: 'block',
@@ -586,6 +678,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   footerEmoji: {
     fontSize: '1.2rem',
+    fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
   },
   footerText: {
     fontSize: '0.85rem',
