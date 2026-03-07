@@ -205,7 +205,10 @@ function App() {
       {/* アドレス入力フォーム */}
       {!address && (
         <div style={styles.inputSection}>
-          <p style={styles.inputLabel}>Enter LUKSO Universal Profile address</p>
+          <p style={styles.inputLabel}>
+            Auto-detected via UniversalEverything Grid<br />
+            or enter your address manually
+          </p>
           <div style={styles.inputGroup}>
             <input
               type="text"
@@ -330,8 +333,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     minHeight: '100vh',
     width: '100%',
     padding: '32px 16px',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    background: 'linear-gradient(180deg, #fff5f8 0%, #ffe4ec 50%, #ffd6e7 100%)',
+    fontFamily: '"Quicksand", "Nunito", system-ui, -apple-system, sans-serif',
+    background: 'linear-gradient(180deg, #fff5f8 0%, #ffe4ec 100%)',
     color: '#2d2d44',
     overflowX: 'hidden',
     boxSizing: 'border-box',
@@ -377,10 +380,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   inputLabel: {
     margin: '0 0 20px 0',
-    fontSize: '1rem',
+    fontSize: '0.95rem',
     color: '#665566',
     textAlign: 'center',
     fontWeight: '500',
+    lineHeight: 1.6,
   },
   inputGroup: {
     display: 'flex',
@@ -393,8 +397,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     minWidth: '240px',
     padding: '16px 20px',
     fontSize: '0.95rem',
-    fontFamily: 'monospace',
-    background: '#faf5f7',
+    fontFamily: '"Quicksand", "Nunito", monospace',
+    background: '#fff',
     border: '2px solid #ffd6e7',
     borderRadius: '14px',
     color: '#2d2d44',
@@ -520,7 +524,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   addressValue: {
     fontSize: '0.75rem',
-    fontFamily: 'monospace',
+    fontFamily: '"Quicksand", "Nunito", monospace',
     color: '#886677',
     wordBreak: 'break-all',
   },
@@ -595,14 +599,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '0.8rem',
     color: '#ff6b9d',
     textDecoration: 'none',
-    fontFamily: 'monospace',
+    fontFamily: '"Quicksand", "Nunito", monospace',
     transition: 'color 0.2s',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   footerContainer: {
     marginTop: '48px',
     paddingTop: '28px',
-    borderTop: '2px dashed rgba(255, 107, 157, 0.2)',
   },
   footer: {
     display: 'flex',
@@ -613,7 +616,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   footerText: {
     fontSize: '0.85rem',
-    color: '#886677',
+    color: '#997788',
   },
   footerHeart: {
     fontSize: '0.95rem',
@@ -634,13 +637,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'opacity 0.2s',
   },
   footerSeparator: {
-    color: '#ccb5c0',
+    color: '#ddaacc',
     fontSize: '0.85rem',
   },
   footerX: {
     fontSize: '0.9rem',
-    fontFamily: 'system-ui, sans-serif',
-    color: '#2d2d44',
+    fontFamily: 'inherit',
+    color: '#665566',
   },
 };
 
