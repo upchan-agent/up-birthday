@@ -222,8 +222,9 @@ function App() {
     <div style={styles.container}>
       {/* ヘッダー */}
       <div style={styles.header}>
-        <h1 style={styles.title}>
-          <span role="img" aria-label="up" style={styles.emoji}>🆙</span> Birthday
+        <h1 style={styles.titleWrapper}>
+          <span style={styles.emoji}>🆙</span>
+          <span style={styles.titleText}>Birthday</span>
         </h1>
         <p style={styles.subtitle}>
           {mode === 'grid' && '📱 Grid Mode'}
@@ -383,20 +384,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     textAlign: 'center',
     marginBottom: '32px',
   },
-  title: {
+  titleWrapper: {
     margin: '0 0 8px 0',
     fontSize: 'clamp(1.8rem, 5vw, 2.5rem)',
     fontWeight: '800',
-    background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 50%, #ff0055 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
     letterSpacing: '-0.02em',
     display: 'inline-block',
   },
   emoji: {
     fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
     fontVariantEmoji: 'emoji',
+    marginRight: '8px',
+  },
+  titleText: {
+    background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 50%, #ff0055 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
   },
   subtitle: {
     margin: 0,
@@ -692,6 +696,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   footerEmoji: {
     fontSize: '1.2rem',
     fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
+    fontVariantEmoji: 'emoji',
   },
   footerText: {
     fontSize: '0.85rem',
