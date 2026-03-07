@@ -44,6 +44,10 @@ function App() {
     // Grid 経由の場合は contextAccounts を使用
     const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
 
+    console.log('UP Address:', upAddress);
+    console.log('Accounts:', accounts);
+    console.log('Context Accounts:', contextAccounts);
+
     if (upAddress) {
       setAddress(upAddress);
       fetchProfile(upAddress);
@@ -52,6 +56,7 @@ function App() {
 
     // イベントリスナー設定
     const handleAccountsChanged = (newAccounts: string[]) => {
+      console.log('Accounts Changed:', newAccounts);
       if (newAccounts.length > 0) {
         setAddress(newAccounts[0]);
         fetchProfile(newAccounts[0]);
@@ -60,6 +65,7 @@ function App() {
     };
 
     const handleContextAccountsChanged = (newContextAccounts: string[]) => {
+      console.log('Context Accounts Changed:', newContextAccounts);
       if (newContextAccounts.length > 0) {
         setAddress(newContextAccounts[0]);
         fetchProfile(newContextAccounts[0]);
@@ -77,6 +83,7 @@ function App() {
   }, []);
 
   const fetchProfile = async (addr: string) => {
+    console.log('Fetching profile for:', addr);
     try {
       const erc725 = new ERC725(
         LSP3Schema,
@@ -87,12 +94,37 @@ function App() {
         }
       );
 
+      console.log('ERC725 instance created');
+
+      // getData で生データを取得
+      const data = await erc725.getData('LSP3Profile');
+      console.log('Raw LSP3Profile data:', data);
+
+      // fetchData で JSON を取得
       const result = await erc725.fetchData('LSP3Profile');
-      const profileData = result.value as { name?: string; description?: string; links?: Array<{ title: string; url: string }>; profileImage?: Array<{ url: string }> };
+      console.log('Fetched profile JSON:', result);
+
+      const profileData = result.value as any;
+      console.log('Profile data parsed:', profileData);
+
+      // プロフィール画像の URL を取得
+      let avatarUrl: string | undefined;
+      if (profileData?.profileImage && Array.isArray(profileData.profileImage) && profileData.profileImage.length > 0) {
+        const img = profileData.profileImage[0];
+        // IPFS URL の場合、ゲートウェイに変換
+        if (img.url?.startsWith('ipfs://')) {
+          avatarUrl = img.url.replace('ipfs://', 'https://api.universalprofile.cloud/ipfs/');
+        } else if (img.url?.startsWith('https://')) {
+          avatarUrl = img.url;
+        }
+      }
+
+      console.log('Avatar URL:', avatarUrl);
+      console.log('Profile name:', profileData?.name);
 
       setProfile({
-        name: profileData.name || 'Unknown',
-        avatarUrl: profileData.profileImage?.[0]?.url,
+        name: profileData?.name || 'Unknown',
+        avatarUrl,
       });
     } catch (e) {
       console.error('Failed to fetch profile:', e);
@@ -148,10 +180,14 @@ function App() {
             <img
               src={profile.avatarUrl}
               alt={profile.name}
-              style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }}
+              style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', background: '#333' }}
+              onError={(e) => {
+                console.log('Image load error:', e);
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
             />
           ) : (
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 'bold', color: '#fff' }}>
               {profile.name.charAt(0).toUpperCase()}
             </div>
           )}
