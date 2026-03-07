@@ -1,17 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ERC725 } from '@erc725/erc725.js';
 import { createClientUPProvider } from '@lukso/up-provider';
-
-// LSP3 Schema
-const LSP3Schema = [
-  {
-    name: 'LSP3Profile',
-    key: '0x5ef83ad9559033e6e941db7d7c495acdce616347d28e90c7ce47cbfcfcad3bc5',
-    keyType: 'Singleton',
-    valueType: 'bytes',
-    valueContent: 'JSONURL',
-  },
-];
 
 interface ProfileData {
   name: string;
@@ -26,6 +14,14 @@ interface BirthdayData {
   txUrl: string;
 }
 
+// IPFS ゲートウェイ候補
+const IPFS_GATEWAYS = [
+  'https://api.universalprofile.cloud/ipfs/',
+  'https://ipfs.io/ipfs/',
+  'https://cloudflare-ipfs.com/ipfs/',
+  'https://gateway.pinata.cloud/ipfs/',
+];
+
 function App() {
   const [address, setAddress] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -34,19 +30,12 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // UP Provider の初期化
     const provider = createClientUPProvider();
 
-    // 初期接続状態を取得
     const accounts = provider.accounts as string[];
     const contextAccounts = provider.contextAccounts as string[];
 
-    // Grid 経由の場合は contextAccounts を使用
     const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
-
-    console.log('UP Address:', upAddress);
-    console.log('Accounts:', accounts);
-    console.log('Context Accounts:', contextAccounts);
 
     if (upAddress) {
       setAddress(upAddress);
@@ -54,9 +43,7 @@ function App() {
       fetchBirthday(upAddress);
     }
 
-    // イベントリスナー設定
     const handleAccountsChanged = (newAccounts: string[]) => {
-      console.log('Accounts Changed:', newAccounts);
       if (newAccounts.length > 0) {
         setAddress(newAccounts[0]);
         fetchProfile(newAccounts[0]);
@@ -65,7 +52,6 @@ function App() {
     };
 
     const handleContextAccountsChanged = (newContextAccounts: string[]) => {
-      console.log('Context Accounts Changed:', newContextAccounts);
       if (newContextAccounts.length > 0) {
         setAddress(newContextAccounts[0]);
         fetchProfile(newContextAccounts[0]);
@@ -83,55 +69,87 @@ function App() {
   }, []);
 
   const fetchProfile = async (addr: string) => {
-    console.log('Fetching profile for:', addr);
     try {
-      const erc725 = new ERC725(
-        LSP3Schema,
-        addr,
-        'https://rpc.mainnet.lukso.network',
-        {
-          ipfsGateway: 'https://api.universalprofile.cloud/ipfs',
+      // LSP3Profile のデータキー
+      const LSP3_KEY = '0x5ef83ad9559033e6e941db7d7c495acdce616347d28e90c7ce47cbfcfcad3bc5';
+
+      // データを取得
+      const response = await fetch('https://rpc.mainnet.lukso.network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_getData',
+          params: [addr, LSP3_KEY],
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!data.result || data.result === '0x') {
+        setProfile({ name: 'Unknown' });
+        return;
+      }
+
+      // VerifiableURI をデコード
+      const decoded = decodeVerifiableURI(data.result);
+      console.log('Decoded URI:', decoded);
+
+      if (!decoded.url) {
+        setProfile({ name: 'Unknown' });
+        return;
+      }
+
+      // IPFS URL をゲートウェイ URL に変換
+      let jsonUrl = decoded.url;
+      if (jsonUrl.startsWith('ipfs://')) {
+        // 複数のゲートウェイを試す
+        for (const gateway of IPFS_GATEWAYS) {
+          try {
+            const testUrl = gateway + jsonUrl.replace('ipfs://', '');
+            const testRes = await fetch(testUrl, { method: 'HEAD' });
+            if (testRes.ok) {
+              jsonUrl = testUrl;
+              break;
+            }
+          } catch {
+            continue;
+          }
         }
-      );
+        // 全部ダメだったらデフォルト
+        if (jsonUrl.startsWith('ipfs://')) {
+          jsonUrl = IPFS_GATEWAYS[0] + jsonUrl.replace('ipfs://', '');
+        }
+      }
 
-      console.log('ERC725 instance created');
+      console.log('Fetching profile from:', jsonUrl);
 
-      // getData で生データを取得
-      const data = await erc725.getData('LSP3Profile');
-      console.log('Raw LSP3Profile data:', data);
+      // プロフィール JSON を取得
+      const profileRes = await fetch(jsonUrl);
+      const profileJson = await profileRes.json();
+      console.log('Profile JSON:', profileJson);
 
-      // fetchData で JSON を取得
-      const result = await erc725.fetchData('LSP3Profile');
-      console.log('Fetched profile JSON:', result);
-
-      const profileData = result.value as any;
-      console.log('Profile data parsed:', profileData);
+      const lsp3Data = profileJson.LSP3Profile || profileJson;
 
       // プロフィール画像の URL を取得
       let avatarUrl: string | undefined;
-      if (profileData?.profileImage && Array.isArray(profileData.profileImage) && profileData.profileImage.length > 0) {
-        const img = profileData.profileImage[0];
-        console.log('Profile image object:', img);
-        console.log('Image URL:', img.url);
-        
-        // IPFS URL の場合、ゲートウェイに変換
+      if (lsp3Data.profileImage && Array.isArray(lsp3Data.profileImage) && lsp3Data.profileImage.length > 0) {
+        const img = lsp3Data.profileImage[0];
         if (img.url && typeof img.url === 'string') {
           if (img.url.startsWith('ipfs://')) {
-            avatarUrl = 'https://api.universalprofile.cloud/ipfs/' + img.url.replace('ipfs://', '');
-          } else if (img.url.startsWith('https://')) {
-            avatarUrl = img.url;
-          } else if (img.url.startsWith('http://')) {
+            avatarUrl = IPFS_GATEWAYS[0] + img.url.replace('ipfs://', '');
+          } else if (img.url.startsWith('https://') || img.url.startsWith('http://')) {
             avatarUrl = img.url;
           }
         }
       }
-      console.log('Final avatar URL:', avatarUrl);
 
       console.log('Avatar URL:', avatarUrl);
-      console.log('Profile name:', profileData?.name);
+      console.log('Name:', lsp3Data.name);
 
       setProfile({
-        name: profileData?.name || 'Unknown',
+        name: lsp3Data.name || 'Unknown',
         avatarUrl,
       });
     } catch (e) {
@@ -181,7 +199,6 @@ function App() {
         <span style={{ fontFamily: '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif' }}>🎂</span> UP Birthday
       </h2>
 
-      {/* プロフィール表示 */}
       {profile && (
         <div style={{ marginBottom: '20px', padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
           {profile.avatarUrl ? (
@@ -206,7 +223,6 @@ function App() {
         </div>
       )}
 
-      {/* アドレス表示 */}
       {address && (
         <div style={{ marginBottom: '20px', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', fontSize: '0.75rem', wordBreak: 'break-all', textAlign: 'center' }}>
           <span style={{ color: '#888' }}>Address: </span>
@@ -214,21 +230,18 @@ function App() {
         </div>
       )}
 
-      {/* ローディング */}
       {loading && (
         <div style={{ padding: '15px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px', textAlign: 'center' }}>
           <p style={{ margin: 0 }}>🎈 Checking your birthday...</p>
         </div>
       )}
 
-      {/* エラー */}
       {error && (
         <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(255,0,85,0.1)', borderRadius: '12px' }}>
           <p style={{ margin: 0, color: '#d00' }}>⚠️ {error}</p>
         </div>
       )}
 
-      {/* 誕生日情報 */}
       {birthday && (
         <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px' }}>
           <div style={{ marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
@@ -255,6 +268,36 @@ function App() {
       )}
     </div>
   );
+}
+
+// VerifiableURI をデコードする関数
+function decodeVerifiableURI(hex: string): { hashFunction: string; hash: string; url: string } {
+  // VerifiableURI の構造:
+  // 0x00006f357c6a = magic (keccak256(utf8))
+  // 0020 = hash length (32 bytes)
+  // [32 bytes hash]
+  // [url as utf8 string]
+
+  if (!hex || hex === '0x') {
+    return { hashFunction: '', hash: '', url: '' };
+  }
+
+  const magic = hex.slice(0, 10); // 0x00006f357c6a
+  const hashLength = parseInt(hex.slice(10, 14), 16) * 2; // 20 (32 bytes = 64 hex chars)
+  const hash = '0x' + hex.slice(14, 14 + hashLength);
+  const urlHex = hex.slice(14 + hashLength);
+
+  // Hex to string
+  let url = '';
+  for (let i = 0; i < urlHex.length; i += 2) {
+    url += String.fromCharCode(parseInt(urlHex.slice(i, i + 2), 16));
+  }
+
+  return {
+    hashFunction: magic === '0x00006f357c6a' ? 'keccak256(utf8)' : 'unknown',
+    hash,
+    url,
+  };
 }
 
 export default App;
