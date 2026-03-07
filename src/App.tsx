@@ -177,7 +177,6 @@ function App() {
       log('Provider type:', typeof provider);
       log('Provider accounts:', provider.accounts);
       log('Provider contextAccounts:', provider.contextAccounts);
-      log('Provider ready:', provider.ready);
 
       // アドレスを取得
       const accounts = provider.accounts as string[];
