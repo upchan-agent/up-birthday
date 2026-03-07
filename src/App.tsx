@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createClientUPProvider } from '@lukso/up-provider';
+import { createPublicClient, http, parseAbi, defineChain } from 'viem';
 
 interface ProfileData {
   name: string;
@@ -14,13 +15,37 @@ interface BirthdayData {
   txUrl: string;
 }
 
-// IPFS ゲートウェイ候補
-const IPFS_GATEWAYS = [
-  'https://api.universalprofile.cloud/ipfs/',
-  'https://ipfs.io/ipfs/',
-  'https://cloudflare-ipfs.com/ipfs/',
-  'https://gateway.pinata.cloud/ipfs/',
-];
+const IPFS_GATEWAY = 'https://api.universalprofile.cloud/ipfs/';
+
+// LSP3Profile のデータキー
+const LSP3_KEY = '0x5ef83ad9559033e6e941db7d7c495acdce616347d28e90c7ce47cbfcfcad3bc5' as const;
+
+// LUKSO Mainnet のチェーン定義
+const luksoMainnet = defineChain({
+  id: 42,
+  name: 'LUKSO Mainnet',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'LUKSO',
+    symbol: 'LYX',
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://rpc.mainnet.lukso.network'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'LUKSO Explorer',
+      url: 'https://explorer.execution.mainnet.lukso.network',
+    },
+  },
+});
+
+// UniversalProfile の ABI（getData 用）
+const UP_ABI = parseAbi([
+  'function getData(bytes32 key) external view returns (bytes memory value)',
+]);
 
 function App() {
   const [address, setAddress] = useState<string | null>(null);
@@ -36,6 +61,10 @@ function App() {
     const contextAccounts = provider.contextAccounts as string[];
 
     const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
+
+    console.log('[UP Birthday] Address:', upAddress);
+    console.log('[UP Birthday] Accounts:', accounts);
+    console.log('[UP Birthday] Context:', contextAccounts);
 
     if (upAddress) {
       setAddress(upAddress);
@@ -69,32 +98,33 @@ function App() {
   }, []);
 
   const fetchProfile = async (addr: string) => {
+    console.log('[UP Birthday] Fetching profile for:', addr);
     try {
-      // LSP3Profile のデータキー
-      const LSP3_KEY = '0x5ef83ad9559033e6e941db7d7c495acdce616347d28e90c7ce47cbfcfcad3bc5';
-
-      // データを取得
-      const response = await fetch('https://rpc.mainnet.lukso.network', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'eth_getData',
-          params: [addr, LSP3_KEY],
-        }),
+      // viem で LUKSO RPC に接続
+      const client = createPublicClient({
+        chain: luksoMainnet,
+        transport: http(),
       });
 
-      const data = await response.json();
-      
-      if (!data.result || data.result === '0x') {
+      // getData を呼び出し
+      const data = await client.readContract({
+        address: addr as `0x${string}`,
+        abi: UP_ABI,
+        functionName: 'getData',
+        args: [LSP3_KEY],
+      });
+
+      console.log('[UP Birthday] Raw data:', data);
+
+      if (!data || data === '0x') {
+        console.log('[UP Birthday] No LSP3Profile data');
         setProfile({ name: 'Unknown' });
         return;
       }
 
       // VerifiableURI をデコード
-      const decoded = decodeVerifiableURI(data.result);
-      console.log('Decoded URI:', decoded);
+      const decoded = decodeVerifiableURI(data);
+      console.log('[UP Birthday] Decoded URI:', decoded);
 
       if (!decoded.url) {
         setProfile({ name: 'Unknown' });
@@ -104,31 +134,18 @@ function App() {
       // IPFS URL をゲートウェイ URL に変換
       let jsonUrl = decoded.url;
       if (jsonUrl.startsWith('ipfs://')) {
-        // 複数のゲートウェイを試す
-        for (const gateway of IPFS_GATEWAYS) {
-          try {
-            const testUrl = gateway + jsonUrl.replace('ipfs://', '');
-            const testRes = await fetch(testUrl, { method: 'HEAD' });
-            if (testRes.ok) {
-              jsonUrl = testUrl;
-              break;
-            }
-          } catch {
-            continue;
-          }
-        }
-        // 全部ダメだったらデフォルト
-        if (jsonUrl.startsWith('ipfs://')) {
-          jsonUrl = IPFS_GATEWAYS[0] + jsonUrl.replace('ipfs://', '');
-        }
+        jsonUrl = IPFS_GATEWAY + jsonUrl.replace('ipfs://', '');
       }
 
-      console.log('Fetching profile from:', jsonUrl);
+      console.log('[UP Birthday] Fetching from:', jsonUrl);
 
       // プロフィール JSON を取得
       const profileRes = await fetch(jsonUrl);
+      if (!profileRes.ok) {
+        throw new Error(`Failed to fetch profile: ${profileRes.status}`);
+      }
       const profileJson = await profileRes.json();
-      console.log('Profile JSON:', profileJson);
+      console.log('[UP Birthday] Profile JSON:', profileJson);
 
       const lsp3Data = profileJson.LSP3Profile || profileJson;
 
@@ -138,22 +155,22 @@ function App() {
         const img = lsp3Data.profileImage[0];
         if (img.url && typeof img.url === 'string') {
           if (img.url.startsWith('ipfs://')) {
-            avatarUrl = IPFS_GATEWAYS[0] + img.url.replace('ipfs://', '');
+            avatarUrl = IPFS_GATEWAY + img.url.replace('ipfs://', '');
           } else if (img.url.startsWith('https://') || img.url.startsWith('http://')) {
             avatarUrl = img.url;
           }
         }
       }
 
-      console.log('Avatar URL:', avatarUrl);
-      console.log('Name:', lsp3Data.name);
+      console.log('[UP Birthday] Avatar URL:', avatarUrl);
+      console.log('[UP Birthday] Name:', lsp3Data.name);
 
       setProfile({
         name: lsp3Data.name || 'Unknown',
         avatarUrl,
       });
     } catch (e) {
-      console.error('Failed to fetch profile:', e);
+      console.error('[UP Birthday] Profile fetch error:', e);
       setProfile({ name: 'Unknown' });
     }
   };
@@ -272,22 +289,21 @@ function App() {
 
 // VerifiableURI をデコードする関数
 function decodeVerifiableURI(hex: string): { hashFunction: string; hash: string; url: string } {
+  if (!hex || hex === '0x') {
+    return { hashFunction: '', hash: '', url: '' };
+  }
+
   // VerifiableURI の構造:
   // 0x00006f357c6a = magic (keccak256(utf8))
   // 0020 = hash length (32 bytes)
   // [32 bytes hash]
   // [url as utf8 string]
 
-  if (!hex || hex === '0x') {
-    return { hashFunction: '', hash: '', url: '' };
-  }
-
-  const magic = hex.slice(0, 10); // 0x00006f357c6a
-  const hashLength = parseInt(hex.slice(10, 14), 16) * 2; // 20 (32 bytes = 64 hex chars)
+  const magic = hex.slice(0, 10);
+  const hashLength = parseInt(hex.slice(10, 14), 16) * 2;
   const hash = '0x' + hex.slice(14, 14 + hashLength);
   const urlHex = hex.slice(14 + hashLength);
 
-  // Hex to string
   let url = '';
   for (let i = 0; i < urlHex.length; i += 2) {
     url += String.fromCharCode(parseInt(urlHex.slice(i, i + 2), 16));
