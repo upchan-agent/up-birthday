@@ -15,7 +15,9 @@ body {
 
 #root {
   width: 100%;
+  min-height: 100vh;
   margin: 0;
   padding: 0;
   text-align: center;
+  background: linear-gradient(180deg, #fff5f8 0%, #ffe4ec 100%);
 }
