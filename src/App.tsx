@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createClientUPProvider, type UPProvider } from '@lukso/up-provider';
+import { createClientUPProvider } from '@lukso/up-provider';
 import { createPublicClient, http, parseAbi, defineChain } from 'viem';
 
 const IPFS_GATEWAY = 'https://api.universalprofile.cloud/ipfs/';
@@ -171,7 +171,7 @@ function App() {
       // 少し待ってから初期化（Grid からのメッセージを待つ）
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const provider: UPProvider = createClientUPProvider();
+      const provider = createClientUPProvider();
       
       log('Provider created');
       log('Provider type:', typeof provider);
