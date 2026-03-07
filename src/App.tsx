@@ -4,7 +4,7 @@ import { request } from 'graphql-request';
 
 const GRAPHQL_ENDPOINT = 'https://envio.lukso-mainnet.universal.tech/v1/graphql';
 
-const GET_PROFILE_QUERY = gql`
+const GET_PROFILE_QUERY = `
   query GetProfile($address: String!) {
     Profile(where: { id: { _eq: $address } }) {
       id
