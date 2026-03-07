@@ -39,7 +39,6 @@ function App() {
   const [birthday, setBirthday] = useState<BirthdayData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [manualMode, setManualMode] = useState(false);
 
   // URL パラメータからアドレスを取得
   useEffect(() => {
@@ -48,7 +47,6 @@ function App() {
     if (addrParam && addrParam.startsWith('0x')) {
       setInputAddress(addrParam);
       setAddress(addrParam.toLowerCase() as `0x${string}`);
-      setManualMode(true);
       fetchProfile(addrParam);
       fetchBirthday(addrParam);
     }
@@ -56,9 +54,6 @@ function App() {
 
   // Grid 経由の接続を監視
   useEffect(() => {
-    // 手動モード中は Grid 接続を無視
-    if (manualMode) return;
-
     const provider = createClientUPProvider();
 
     const accounts = provider.accounts as string[];
@@ -74,7 +69,6 @@ function App() {
     }
 
     const handleAccountsChanged = (newAccounts: string[]) => {
-      if (manualMode) return;
       if (newAccounts.length > 0 && !address) {
         setInputAddress(newAccounts[0]);
         setAddress(newAccounts[0]);
@@ -84,7 +78,6 @@ function App() {
     };
 
     const handleContextAccountsChanged = (newContextAccounts: string[]) => {
-      if (manualMode) return;
       if (newContextAccounts.length > 0 && !address) {
         setInputAddress(newContextAccounts[0]);
         setAddress(newContextAccounts[0]);
@@ -100,7 +93,7 @@ function App() {
       provider.removeListener('accountsChanged', handleAccountsChanged);
       provider.removeListener('contextAccountsChanged', handleContextAccountsChanged);
     };
-  }, [address, manualMode]);
+  }, [address]);
 
   const fetchProfile = async (addr: string) => {
     setLoading(true);
@@ -183,7 +176,6 @@ function App() {
     }
     const addr = inputAddress.toLowerCase();
     setAddress(addr);
-    setManualMode(true);
     fetchProfile(addr);
     fetchBirthday(addr);
   };
@@ -194,7 +186,6 @@ function App() {
     setProfile(null);
     setBirthday(null);
     setError(null);
-    setManualMode(false);
   };
 
   return (
@@ -211,28 +202,26 @@ function App() {
         </p>
       </div>
 
-      {/* アドレス入力フォーム */}
-      {!address && (
-        <div style={styles.inputSection}>
-          <p style={styles.inputLabel}>
-            Auto-detected via UniversalEverything Grid<br />
-            or enter your address manually
-          </p>
-          <div style={styles.inputGroup}>
-            <input
-              type="text"
-              value={inputAddress}
-              onChange={(e) => setInputAddress(e.target.value)}
-              placeholder="0x5bA145ebB07e603328285A04589da2a7A202fCED"
-              style={styles.input}
-              onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
-            />
-            <button onClick={handleCheck} style={styles.button}>
-              Check
-            </button>
-          </div>
+      {/* アドレス入力フォーム（常に表示） */}
+      <div style={styles.inputSection}>
+        <p style={styles.inputLabel}>
+          Auto-detected via UniversalEverything Grid<br />
+          or enter your address manually
+        </p>
+        <div style={styles.inputGroup}>
+          <input
+            type="text"
+            value={inputAddress}
+            onChange={(e) => setInputAddress(e.target.value)}
+            placeholder="0x5bA145ebB07e603328285A04589da2a7A202fCED"
+            style={styles.input}
+            onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
+          />
+          <button onClick={handleCheck} style={styles.button}>
+            Check
+          </button>
         </div>
-      )}
+      </div>
 
       {/* ローディング */}
       {loading && (
@@ -273,12 +262,11 @@ function App() {
             )}
             <div style={styles.profileInfo}>
               <div style={styles.profileName}>{profile.name}</div>
-              <div style={styles.addressValue}>{address}</div>
             </div>
           </div>
 
           <button onClick={handleReset} style={styles.resetButtonSmall}>
-            🔍 Check Another
+            🔍 Clear
           </button>
         </div>
       )}
@@ -320,7 +308,7 @@ function App() {
       {/* フッター（常に表示） */}
       <div style={styles.footerContainer}>
         <div style={styles.footer}>
-          <span style={styles.footerText}>Built with </span>
+          <span style={styles.footerText}>Made with </span>
           <span style={styles.footerHeart}>❤️</span>
           <span style={styles.footerText}> by </span>
           <a href="https://profile.link/🆙chan@bcA4" target="_blank" rel="noopener noreferrer" style={styles.footerLink}>
@@ -343,7 +331,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
     padding: '32px 16px',
     fontFamily: 'inherit',
-    background: '#fff9fb',
+    background: '#fce8ed',
     color: '#2d2d44',
     overflowX: 'hidden',
     boxSizing: 'border-box',
@@ -378,12 +366,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   inputSection: {
     maxWidth: '520px',
-    margin: '0 auto 40px',
+    margin: '0 auto 24px',
     padding: '32px',
-    background: '#ffffff',
+    background: '#ffd6e7',
     borderRadius: '24px',
-    border: '2px solid #ffd6e7',
-    boxShadow: '0 4px 20px rgba(255, 107, 157, 0.08)',
+    border: '2px solid #ff85a8',
+    boxShadow: '0 4px 16px rgba(255, 133, 168, 0.15)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -419,7 +407,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '16px 32px',
     fontSize: '1rem',
     fontWeight: '700',
-    background: 'linear-gradient(135deg, #ff6b9d 0%, #ff0055 100%)',
+    background: '#ff85a8',
     border: 'none',
     borderRadius: '14px',
     color: '#ffffff',
@@ -427,11 +415,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'transform 0.2s, box-shadow 0.2s',
     whiteSpace: 'nowrap',
     flexShrink: 0,
-    boxShadow: '0 4px 16px rgba(255, 107, 157, 0.4)',
+    boxShadow: '0 4px 16px rgba(255, 133, 168, 0.3)',
   },
   loadingCard: {
     maxWidth: '500px',
-    margin: '0 auto',
+    margin: '0 auto 24px',
     padding: '48px 24px',
     background: '#ffffff',
     borderRadius: '24px',
@@ -450,11 +438,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   errorCard: {
     maxWidth: '500px',
-    margin: '0 auto',
+    margin: '0 auto 24px',
     padding: '24px 28px',
-    background: '#fff5f8',
+    background: '#ffffff',
     borderRadius: '20px',
-    border: '2px solid #ffb3c6',
+    border: '2px solid #ff85a8',
     display: 'flex',
     alignItems: 'center',
     gap: '14px',
@@ -485,10 +473,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '520px',
     margin: '0 auto 24px',
     padding: '28px',
-    background: '#ffffff',
+    background: '#ffd6e7',
     borderRadius: '24px',
-    border: '2px solid #ffd6e7',
-    boxShadow: '0 4px 20px rgba(255, 107, 157, 0.08)',
+    border: '2px solid #ff85a8',
+    boxShadow: '0 4px 16px rgba(255, 133, 168, 0.15)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -542,10 +530,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '14px',
     fontSize: '0.95rem',
     fontWeight: '600',
-    background: 'linear-gradient(135deg, #fff5f8 0%, #ffe4ec 100%)',
-    border: '2px solid rgba(255, 107, 157, 0.25)',
+    background: '#ffc2d6',
+    border: '2px solid #ff85a8',
     borderRadius: '14px',
-    color: '#ff6b9d',
+    color: '#d65a7f',
     cursor: 'pointer',
     transition: 'background 0.2s',
   },
@@ -553,10 +541,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '520px',
     margin: '0 auto',
     padding: '32px 28px',
-    background: '#ffffff',
+    background: '#ffc2d6',
     borderRadius: '24px',
-    border: '2px solid #ffd6e7',
-    boxShadow: '0 4px 20px rgba(255, 107, 157, 0.08)',
+    border: '2px solid #ff85a8',
+    boxShadow: '0 4px 16px rgba(255, 133, 168, 0.15)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -569,9 +557,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '10px',
     padding: '10px 20px',
-    background: '#fff5f8',
+    background: '#ffc2d6',
     borderRadius: '20px',
-    border: '2px solid #ffd6e7',
+    border: '2px solid #ff85a8',
   },
   birthdayCake: {
     fontSize: '1.6rem',
@@ -584,7 +572,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   birthdayItem: {
     padding: '18px 0',
-    borderBottom: '2px dashed #ffd6e7',
+    borderBottom: '2px dashed #ff85a8',
     textAlign: 'center',
   },
   birthdayLabel: {
@@ -615,7 +603,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   footerContainer: {
     marginTop: '48px',
     paddingTop: '28px',
-    borderTop: '2px dashed #ffd6e7',
   },
   footer: {
     display: 'flex',
