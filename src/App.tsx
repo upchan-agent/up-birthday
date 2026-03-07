@@ -339,18 +339,49 @@ function decodeVerifiableURI(hex: string): { hashFunction: string; hash: string;
     return { hashFunction: '', hash: '', url: '' };
   }
 
-  const magic = hex.slice(0, 10);
-  const hashLength = parseInt(hex.slice(10, 14), 16) * 2;
-  const hash = '0x' + hex.slice(14, 14 + hashLength);
-  const urlHex = hex.slice(14 + hashLength);
+  // VerifiableURI 構造:
+  // 0x (プレフィックス)
+  // 0000 (verificationMethod: 0 = keccak256)
+  // 6f357c6a (hashFunction: 4 bytes)
+  // 0020 (hashLength: 32 bytes = 64 hex chars)
+  // [64 hex chars hash]
+  // [url as UTF-8 hex]
+
+  // ヘッダー: 0x + 0000 + 6f357c6a + 0020 = 10 + 8 = 18 chars (0x 含む)
+  // 実際には: 0x00006f357c6a0020 = 18 chars
+  
+  if (hex.length < 18) {
+    console.error('VerifiableURI too short:', hex);
+    return { hashFunction: '', hash: '', url: '' };
+  }
+
+  const verificationMethod = hex.slice(2, 6); // 0000
+  const hashFunctionHex = hex.slice(6, 14); // 6f357c6a
+  const hashLengthHex = hex.slice(14, 18); // 0020
+  
+  const hashLength = parseInt(hashLengthHex, 16) * 2; // 32 * 2 = 64
+  const hash = '0x' + hex.slice(18, 18 + hashLength);
+  const urlHex = hex.slice(18 + hashLength);
+
+  console.log('Verification method:', verificationMethod);
+  console.log('Hash function:', hashFunctionHex);
+  console.log('Hash length:', hashLength);
+  console.log('Hash:', hash);
+  console.log('URL hex length:', urlHex.length);
+  console.log('URL hex (first 100):', urlHex.slice(0, 100));
 
   let url = '';
   for (let i = 0; i < urlHex.length; i += 2) {
-    url += String.fromCharCode(parseInt(urlHex.slice(i, i + 2), 16));
+    const code = parseInt(urlHex.slice(i, i + 2), 16);
+    if (code > 0) { // .null 文字をスキップ
+      url += String.fromCharCode(code);
+    }
   }
 
+  console.log('Decoded URL:', url);
+
   return {
-    hashFunction: magic === '0x00006f357c6a' ? 'keccak256(utf8)' : 'unknown',
+    hashFunction: hashFunctionHex === '6f357c6a' ? 'keccak256(utf8)' : 'unknown',
     hash,
     url,
   };
