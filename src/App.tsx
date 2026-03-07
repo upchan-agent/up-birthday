@@ -135,8 +135,19 @@ function App() {
       
       if (images.length > 0) {
         const sorted = [...images].sort((a, b) => (a.width || 0) - (b.width || 0));
-        avatarUrl = sorted[0].url;
-        addLog(`Selected image: ${avatarUrl} (${sorted[0].width}x${sorted[0].height})`);
+        const rawUrl = sorted[0].url;
+        
+        // IPFS URL をゲートウェイ URL に変換
+        if (rawUrl?.startsWith('ipfs://')) {
+          avatarUrl = 'https://api.universalprofile.cloud/ipfs/' + rawUrl.replace('ipfs://', '');
+        } else if (rawUrl?.startsWith('https://') || rawUrl?.startsWith('http://')) {
+          avatarUrl = rawUrl;
+        } else {
+          avatarUrl = rawUrl;
+        }
+        
+        addLog(`Selected image (raw): ${rawUrl} (${sorted[0].width}x${sorted[0].height})`);
+        addLog(`Selected image (gateway): ${avatarUrl}`);
       } else {
         addLog('No images available');
       }
@@ -425,6 +436,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
     boxSizing: 'border-box',
   },
+  inputGroup: {
+    display: 'flex',
+    gap: '12px',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
   inputLabel: {
     margin: '0 0 16px 0',
     fontSize: '0.95rem',
@@ -436,6 +453,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     gap: '12px',
     flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   input: {
     flex: '1 1 200px',
@@ -463,6 +481,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'transform 0.2s, box-shadow 0.2s',
     whiteSpace: 'nowrap',
     flexShrink: 0,
+    margin: '0 auto',
   },
   hint: {
     margin: '16px 0 0 0',
