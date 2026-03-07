@@ -212,7 +212,7 @@ function App() {
             type="text"
             value={inputAddress}
             onChange={(e) => setInputAddress(e.target.value)}
-            placeholder="0x5bA145ebB07e603328285A04589da2a7A202fCED"
+            placeholder="0xbcA4eEBea76926c49C64AB86A527CC833eFa3B2D"
             style={styles.input}
             onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
           />
@@ -274,12 +274,8 @@ function App() {
       {birthday && (
         <div style={styles.birthdayCard}>
           <div style={styles.birthdayHeader}>
-            <div style={styles.birthdayTitleWrapper}>
-              <span style={styles.birthdayCake}>🎂</span>
-              <span style={styles.birthdayTitle}>Happy Birthday!</span>
-            </div>
             <p style={styles.birthdaySubtitle}>
-              Your Universal Profile was born on ✨
+              <span style={styles.birthdayCake}>🎂</span> Your Universal Profile was born on ✨
             </p>
           </div>
 
@@ -372,8 +368,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '32px',
     background: '#fce8ed',
     borderRadius: '24px',
-    border: '2px solid #f7b3c7',
-    boxShadow: '0 4px 16px rgba(247, 179, 199, 0.2)',
+    border: '2px solid #f9aec7',
+    boxShadow: '0 4px 16px rgba(249, 174, 199, 0.2)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -398,7 +394,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '0.95rem',
     fontFamily: '"Quicksand", "Nunito", monospace',
     background: '#ffffff',
-    border: '2px solid #f7b3c7',
+    border: '2px solid #f9aec7',
     borderRadius: '14px',
     color: '#333344',
     outline: 'none',
@@ -409,7 +405,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '16px 32px',
     fontSize: '1rem',
     fontWeight: '700',
-    background: '#f78fb3',
+    background: '#f9aec7',
     border: 'none',
     borderRadius: '14px',
     color: '#ffffff',
@@ -417,7 +413,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'transform 0.2s, box-shadow 0.2s',
     whiteSpace: 'nowrap',
     flexShrink: 0,
-    boxShadow: '0 4px 16px rgba(247, 143, 179, 0.25)',
+    boxShadow: '0 4px 16px rgba(249, 174, 199, 0.25)',
   },
   loadingCard: {
     maxWidth: '500px',
@@ -425,7 +421,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '48px 24px',
     background: '#fce8ed',
     borderRadius: '24px',
-    border: '2px solid #f7b3c7',
+    border: '2px solid #f9aec7',
     textAlign: 'center',
   },
   loadingSpinner: {
@@ -444,7 +440,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '24px 28px',
     background: '#fce8ed',
     borderRadius: '20px',
-    border: '2px solid #f78fb3',
+    border: '2px solid #f9aec7',
     display: 'flex',
     alignItems: 'center',
     gap: '14px',
@@ -477,8 +473,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '28px',
     background: '#fce8ed',
     borderRadius: '24px',
-    border: '2px solid #f7b3c7',
-    boxShadow: '0 4px 16px rgba(247, 179, 199, 0.2)',
+    border: '2px solid #f9aec7',
+    boxShadow: '0 4px 16px rgba(249, 174, 199, 0.2)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -532,13 +528,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '16px 32px',
     fontSize: '1rem',
     fontWeight: '700',
-    background: '#f78fb3',
+    background: '#f9aec7',
     border: 'none',
     borderRadius: '14px',
     color: '#ffffff',
     cursor: 'pointer',
     transition: 'transform 0.2s, box-shadow 0.2s',
-    boxShadow: '0 4px 16px rgba(247, 143, 179, 0.25)',
+    boxShadow: '0 4px 16px rgba(249, 174, 199, 0.25)',
   },
   birthdayCard: {
     maxWidth: '520px',
@@ -546,8 +542,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '32px 28px',
     background: '#fce8ed',
     borderRadius: '24px',
-    border: '2px solid #f7b3c7',
-    boxShadow: '0 4px 16px rgba(247, 179, 199, 0.2)',
+    border: '2px solid #f9aec7',
+    boxShadow: '0 4px 16px rgba(249, 174, 199, 0.2)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -555,35 +551,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     textAlign: 'center',
     marginBottom: '28px',
   },
-  birthdayTitleWrapper: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '10px',
-    padding: '12px 24px',
-    background: '#f78fb3',
-    borderRadius: '20px',
-    border: '2px solid #f78fb3',
-    marginBottom: '12px',
-  },
   birthdayCake: {
     fontSize: '1.4rem',
   },
-  birthdayTitle: {
-    fontSize: '1.1rem',
-    fontWeight: '700',
-    color: '#ffffff',
-    letterSpacing: '0.02em',
-  },
   birthdaySubtitle: {
     margin: 0,
-    fontSize: '0.9rem',
+    fontSize: '1.1rem',
     color: '#886677',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   birthdayItem: {
     padding: '18px 0',
-    borderBottom: '2px dashed #f7b3c7',
+    borderBottom: '2px dashed #f9aec7',
     textAlign: 'center',
   },
   birthdayLabel: {
