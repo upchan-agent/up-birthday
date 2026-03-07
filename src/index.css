@@ -1,20 +1,21 @@
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Quicksand', 'Nunito', system-ui, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #ffffff;
-  background-color: #1a1a1a;
+  color: #2d2d44;
+  background: linear-gradient(180deg, #fff5f8 0%, #ffe4ec 100%);
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: linear-gradient(180deg, #fff5f8 0%, #ffe4ec 100%);
 }
 
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   text-align: center;
 }
