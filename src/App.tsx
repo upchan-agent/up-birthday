@@ -515,7 +515,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   profileName: {
     fontSize: '1.4rem',
     fontWeight: '700',
-    color: '#2d2d44',
+    color: '#886677',
     wordBreak: 'break-word',
     marginBottom: '6px',
   },
@@ -587,7 +587,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   birthdayValue: {
     display: 'block',
     fontSize: '0.95rem',
-    color: '#2d2d44',
+    color: '#886677',
     fontWeight: '600',
     wordBreak: 'break-word',
   },
