@@ -548,7 +548,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     textAlign: 'center',
     marginTop: '20px',
     paddingTop: '20px',
-    borderTop: '1px dashed #f7b3c7',
   },
   shareButton: {
     padding: '10px 20px',
