@@ -518,7 +518,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     wordBreak: 'break-all',
   },
   resetButtonSmall: {
-    width: '100%',
     padding: '12px 24px',
     fontSize: '0.9rem',
     fontWeight: '700',
