@@ -1,26 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClientUPProvider } from '@lukso/up-provider';
 import { createPublicClient, http, parseAbi, defineChain } from 'viem';
 
-interface ProfileData {
-  name: string;
-  avatarUrl?: string;
-}
-
-interface BirthdayData {
-  timestamp: string;
-  utc: string;
-  local: string;
-  txHash: string;
-  txUrl: string;
-}
-
 const IPFS_GATEWAY = 'https://api.universalprofile.cloud/ipfs/';
-
-// LSP3Profile のデータキー
 const LSP3_KEY = '0x5ef83ad9559033e6e941db7d7c495acdce616347d28e90c7ce47cbfcfcad3bc5' as const;
 
-// LUKSO Mainnet のチェーン定義
 const luksoMainnet = defineChain({
   id: 42,
   name: 'LUKSO Mainnet',
@@ -42,10 +26,21 @@ const luksoMainnet = defineChain({
   },
 });
 
-// UniversalProfile の ABI（getData 用）
-const UP_ABI = parseAbi([
-  'function getData(bytes32 key) external view returns (bytes memory value)',
-]);
+interface ProfileData {
+  name: string;
+  avatarUrl?: string;
+}
+
+interface BirthdayData {
+  timestamp: string;
+  utc: string;
+  local: string;
+  txHash: string;
+  txUrl: string;
+}
+
+// Provider インスタンスは 1 つだけ作成（コンポーネント外）
+const provider = typeof window !== 'undefined' ? createClientUPProvider() : null;
 
 function App() {
   const [address, setAddress] = useState<string | null>(null);
@@ -53,103 +48,60 @@ function App() {
   const [birthday, setBirthday] = useState<BirthdayData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
-  useEffect(() => {
-    const provider = createClientUPProvider();
-
-    const accounts = provider.accounts as string[];
-    const contextAccounts = provider.contextAccounts as string[];
-
-    const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
-
-    console.log('[UP Birthday] Address:', upAddress);
-    console.log('[UP Birthday] Accounts:', accounts);
-    console.log('[UP Birthday] Context:', contextAccounts);
-
-    if (upAddress) {
-      setAddress(upAddress);
-      fetchProfile(upAddress);
-      fetchBirthday(upAddress);
-    }
-
-    const handleAccountsChanged = (newAccounts: string[]) => {
-      if (newAccounts.length > 0) {
-        setAddress(newAccounts[0]);
-        fetchProfile(newAccounts[0]);
-        fetchBirthday(newAccounts[0]);
-      }
-    };
-
-    const handleContextAccountsChanged = (newContextAccounts: string[]) => {
-      if (newContextAccounts.length > 0) {
-        setAddress(newContextAccounts[0]);
-        fetchProfile(newContextAccounts[0]);
-        fetchBirthday(newContextAccounts[0]);
-      }
-    };
-
-    provider.on('accountsChanged', handleAccountsChanged);
-    provider.on('contextAccountsChanged', handleContextAccountsChanged);
-
-    return () => {
-      provider.removeListener('accountsChanged', handleAccountsChanged);
-      provider.removeListener('contextAccountsChanged', handleContextAccountsChanged);
-    };
+  const log = useCallback((msg: string, data?: any) => {
+    console.log('[UP Birthday]', msg, data || '');
+    setDebugInfo(prev => [...prev.slice(-4), `[${new Date().toLocaleTimeString()}] ${msg}`]);
   }, []);
 
-  const fetchProfile = async (addr: string) => {
-    console.log('[UP Birthday] Fetching profile for:', addr);
+  const fetchProfile = useCallback(async (addr: string) => {
+    log('Fetching profile for:', addr);
     try {
-      // viem で LUKSO RPC に接続
       const client = createPublicClient({
         chain: luksoMainnet,
         transport: http(),
       });
 
-      // getData を呼び出し
       const data = await client.readContract({
         address: addr as `0x${string}`,
-        abi: UP_ABI,
+        abi: parseAbi(['function getData(bytes32 key) external view returns (bytes memory value)']),
         functionName: 'getData',
         args: [LSP3_KEY],
       });
 
-      console.log('[UP Birthday] Raw data:', data);
+      log('Raw data length:', data?.length);
 
       if (!data || data === '0x') {
-        console.log('[UP Birthday] No LSP3Profile data');
+        log('No LSP3Profile data');
         setProfile({ name: 'Unknown' });
         return;
       }
 
-      // VerifiableURI をデコード
       const decoded = decodeVerifiableURI(data);
-      console.log('[UP Birthday] Decoded URI:', decoded);
+      log('Decoded URL:', decoded.url);
 
       if (!decoded.url) {
         setProfile({ name: 'Unknown' });
         return;
       }
 
-      // IPFS URL をゲートウェイ URL に変換
       let jsonUrl = decoded.url;
       if (jsonUrl.startsWith('ipfs://')) {
         jsonUrl = IPFS_GATEWAY + jsonUrl.replace('ipfs://', '');
       }
 
-      console.log('[UP Birthday] Fetching from:', jsonUrl);
+      log('Fetching from:', jsonUrl);
 
-      // プロフィール JSON を取得
       const profileRes = await fetch(jsonUrl);
       if (!profileRes.ok) {
-        throw new Error(`Failed to fetch profile: ${profileRes.status}`);
+        throw new Error(`Failed to fetch: ${profileRes.status}`);
       }
       const profileJson = await profileRes.json();
-      console.log('[UP Birthday] Profile JSON:', profileJson);
+      log('Profile JSON keys:', Object.keys(profileJson));
 
       const lsp3Data = profileJson.LSP3Profile || profileJson;
 
-      // プロフィール画像の URL を取得
       let avatarUrl: string | undefined;
       if (lsp3Data.profileImage && Array.isArray(lsp3Data.profileImage) && lsp3Data.profileImage.length > 0) {
         const img = lsp3Data.profileImage[0];
@@ -162,20 +114,20 @@ function App() {
         }
       }
 
-      console.log('[UP Birthday] Avatar URL:', avatarUrl);
-      console.log('[UP Birthday] Name:', lsp3Data.name);
+      log('Name:', lsp3Data.name);
+      log('Avatar URL:', avatarUrl);
 
       setProfile({
         name: lsp3Data.name || 'Unknown',
         avatarUrl,
       });
     } catch (e) {
-      console.error('[UP Birthday] Profile fetch error:', e);
+      log('Profile fetch error:', e);
       setProfile({ name: 'Unknown' });
     }
-  };
+  }, [log]);
 
-  const fetchBirthday = async (addr: string) => {
+  const fetchBirthday = useCallback(async (addr: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -208,13 +160,77 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!provider) {
+      log('Provider not available');
+      return;
+    }
+
+    log('Initializing provider...');
+
+    // 初期状態を取得
+    const accounts = provider.accounts as string[];
+    const contextAccounts = provider.contextAccounts as string[];
+
+    log('Initial accounts:', accounts);
+    log('Initial contextAccounts:', contextAccounts);
+
+    const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
+
+    if (upAddress) {
+      log('Using address:', upAddress);
+      setAddress(upAddress);
+      fetchProfile(upAddress);
+      fetchBirthday(upAddress);
+    } else {
+      log('No address available');
+    }
+
+    // イベントリスナー
+    const handleAccountsChanged = (newAccounts: string[]) => {
+      log('accountsChanged:', newAccounts);
+      if (newAccounts.length > 0) {
+        setAddress(newAccounts[0]);
+        fetchProfile(newAccounts[0]);
+        fetchBirthday(newAccounts[0]);
+      }
+    };
+
+    const handleContextAccountsChanged = (newContextAccounts: string[]) => {
+      log('contextAccountsChanged:', newContextAccounts);
+      if (newContextAccounts.length > 0) {
+        setAddress(newContextAccounts[0]);
+        fetchProfile(newContextAccounts[0]);
+        fetchBirthday(newContextAccounts[0]);
+      }
+    };
+
+    provider.on('accountsChanged', handleAccountsChanged);
+    provider.on('contextAccountsChanged', handleContextAccountsChanged);
+
+    // クリーンアップ
+    return () => {
+      log('Cleaning up event listeners...');
+      provider.removeListener('accountsChanged', handleAccountsChanged);
+      provider.removeListener('contextAccountsChanged', handleContextAccountsChanged);
+    };
+  }, [fetchProfile, fetchBirthday, log]);
 
   return (
     <div style={{ padding: '20px', fontFamily: 'system-ui, sans-serif', maxWidth: '600px', margin: '0 auto' }}>
       <h2 style={{ marginBottom: '16px', textAlign: 'center' }}>
         <span style={{ fontFamily: '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif' }}>🎂</span> UP Birthday
       </h2>
+
+      {/* デバッグ情報 */}
+      <div style={{ marginBottom: '20px', padding: '10px', background: 'rgba(255,0,85,0.1)', borderRadius: '8px', fontSize: '0.7rem', fontFamily: 'monospace' }}>
+        <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Debug Log:</div>
+        {debugInfo.map((line, i) => (
+          <div key={i}>{line}</div>
+        ))}
+      </div>
 
       {profile && (
         <div style={{ marginBottom: '20px', padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -224,7 +240,7 @@ function App() {
               alt={profile.name}
               style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', background: '#333' }}
               onError={(e) => {
-                console.log('Image load error:', e);
+                log('Image load error');
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
@@ -287,17 +303,10 @@ function App() {
   );
 }
 
-// VerifiableURI をデコードする関数
 function decodeVerifiableURI(hex: string): { hashFunction: string; hash: string; url: string } {
   if (!hex || hex === '0x') {
     return { hashFunction: '', hash: '', url: '' };
   }
-
-  // VerifiableURI の構造:
-  // 0x00006f357c6a = magic (keccak256(utf8))
-  // 0020 = hash length (32 bytes)
-  // [32 bytes hash]
-  // [url as utf8 string]
 
   const magic = hex.slice(0, 10);
   const hashLength = parseInt(hex.slice(10, 14), 16) * 2;
