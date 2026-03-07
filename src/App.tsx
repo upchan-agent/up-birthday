@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createClientUPProvider } from '@lukso/up-provider';
-import { request, gql } from 'graphql-request';
+import { request } from 'graphql-request';
 
 const GRAPHQL_ENDPOINT = 'https://envio.lukso-mainnet.universal.tech/v1/graphql';
 
@@ -448,12 +448,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#aaaacc',
     textAlign: 'center',
     wordBreak: 'break-word',
-  },
-  inputGroup: {
-    display: 'flex',
-    gap: '12px',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
   },
   input: {
     flex: '1 1 200px',
