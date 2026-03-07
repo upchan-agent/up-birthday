@@ -111,13 +111,21 @@ function App() {
       let avatarUrl: string | undefined;
       if (profileData?.profileImage && Array.isArray(profileData.profileImage) && profileData.profileImage.length > 0) {
         const img = profileData.profileImage[0];
+        console.log('Profile image object:', img);
+        console.log('Image URL:', img.url);
+        
         // IPFS URL の場合、ゲートウェイに変換
-        if (img.url?.startsWith('ipfs://')) {
-          avatarUrl = img.url.replace('ipfs://', 'https://api.universalprofile.cloud/ipfs/');
-        } else if (img.url?.startsWith('https://')) {
-          avatarUrl = img.url;
+        if (img.url && typeof img.url === 'string') {
+          if (img.url.startsWith('ipfs://')) {
+            avatarUrl = 'https://api.universalprofile.cloud/ipfs/' + img.url.replace('ipfs://', '');
+          } else if (img.url.startsWith('https://')) {
+            avatarUrl = img.url;
+          } else if (img.url.startsWith('http://')) {
+            avatarUrl = img.url;
+          }
         }
       }
+      console.log('Final avatar URL:', avatarUrl);
 
       console.log('Avatar URL:', avatarUrl);
       console.log('Profile name:', profileData?.name);
