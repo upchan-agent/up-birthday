@@ -1,30 +1,22 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { createClientUPProvider } from '@lukso/up-provider';
-import { createPublicClient, http, parseAbi, defineChain } from 'viem';
+import { request, gql } from 'graphql-request';
 
-const IPFS_GATEWAY = 'https://api.universalprofile.cloud/ipfs/';
-const LSP3_KEY = '0x5ef83ad9559033e6e941db7d7c495acdce616347d28e90c7ce47cbfcfcad3bc5' as const;
+const GRAPHQL_ENDPOINT = 'https://envio.lukso-mainnet.universal.tech/v1/graphql';
 
-const luksoMainnet = defineChain({
-  id: 42,
-  name: 'LUKSO Mainnet',
-  nativeCurrency: {
-    decimals: 18,
-    name: 'LUKSO',
-    symbol: 'LYX',
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://rpc.mainnet.lukso.network'],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: 'LUKSO Explorer',
-      url: 'https://explorer.execution.mainnet.lukso.network',
-    },
-  },
-});
+const GET_PROFILE_QUERY = gql`
+  query GetProfile($address: String!) {
+    Profile(where: { id: { _eq: $address } }) {
+      id
+      name
+      fullName
+      profileImages(where: { error: { _is_null: true } }) {
+        width
+        url
+      }
+    }
+  }
+`;
 
 interface ProfileData {
   name: string;
@@ -41,94 +33,99 @@ interface BirthdayData {
 
 function App() {
   const [address, setAddress] = useState<string | null>(null);
+  const [inputAddress, setInputAddress] = useState('');
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [birthday, setBirthday] = useState<BirthdayData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string[]>([]);
-  const [providerReady, setProviderReady] = useState(false);
+  const [mode, setMode] = useState<'grid' | 'manual' | 'url'>('manual');
 
-  const log = useCallback((msg: string, data?: any) => {
-    const logMsg = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    console.log('[UP Birthday]', msg, data || '');
-    setDebugInfo(prev => [...prev.slice(-9), logMsg + (data ? `: ${JSON.stringify(data).slice(0, 50)}` : '')]);
+  // URL パラメータからアドレスを取得
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const addrParam = params.get('address');
+    if (addrParam && addrParam.startsWith('0x')) {
+      setAddress(addrParam.toLowerCase() as `0x${string}`);
+      setMode('url');
+      fetchProfile(addrParam);
+      fetchBirthday(addrParam);
+    }
   }, []);
 
-  const fetchProfile = useCallback(async (addr: string) => {
-    log('Fetching profile for:', addr);
+  // Grid 経由の接続を監視
+  useEffect(() => {
+    const provider = createClientUPProvider();
+
+    const accounts = provider.accounts as string[];
+    const contextAccounts = provider.contextAccounts as string[];
+
+    const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
+
+    if (upAddress && !address) {
+      setAddress(upAddress);
+      setMode('grid');
+      fetchProfile(upAddress);
+      fetchBirthday(upAddress);
+    }
+
+    const handleAccountsChanged = (newAccounts: string[]) => {
+      if (newAccounts.length > 0 && !address) {
+        setAddress(newAccounts[0]);
+        setMode('grid');
+        fetchProfile(newAccounts[0]);
+        fetchBirthday(newAccounts[0]);
+      }
+    };
+
+    const handleContextAccountsChanged = (newContextAccounts: string[]) => {
+      if (newContextAccounts.length > 0 && !address) {
+        setAddress(newContextAccounts[0]);
+        setMode('grid');
+        fetchProfile(newContextAccounts[0]);
+        fetchBirthday(newContextAccounts[0]);
+      }
+    };
+
+    provider.on('accountsChanged', handleAccountsChanged);
+    provider.on('contextAccountsChanged', handleContextAccountsChanged);
+
+    return () => {
+      provider.removeListener('accountsChanged', handleAccountsChanged);
+      provider.removeListener('contextAccountsChanged', handleContextAccountsChanged);
+    };
+  }, [address]);
+
+  const fetchProfile = async (addr: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      const client = createPublicClient({
-        chain: luksoMainnet,
-        transport: http(),
-      });
+      const data = await request(GRAPHQL_ENDPOINT, GET_PROFILE_QUERY, { address: addr.toLowerCase() });
+      const profileData = data.Profile?.[0];
 
-      const data = await client.readContract({
-        address: addr as `0x${string}`,
-        abi: parseAbi(['function getData(bytes32 key) external view returns (bytes memory value)']),
-        functionName: 'getData',
-        args: [LSP3_KEY],
-      });
-
-      log('Raw data length:', data?.length);
-
-      if (!data || data === '0x') {
-        log('No LSP3Profile data');
+      if (!profileData) {
         setProfile({ name: 'Unknown' });
         return;
       }
 
-      const decoded = decodeVerifiableURI(data);
-      log('Decoded URL:', decoded.url);
-
-      if (!decoded.url) {
-        setProfile({ name: 'Unknown' });
-        return;
-      }
-
-      let jsonUrl = decoded.url;
-      if (jsonUrl.startsWith('ipfs://')) {
-        jsonUrl = IPFS_GATEWAY + jsonUrl.replace('ipfs://', '');
-      }
-
-      log('Fetching from:', jsonUrl);
-
-      const profileRes = await fetch(jsonUrl);
-      if (!profileRes.ok) {
-        throw new Error(`Failed to fetch: ${profileRes.status}`);
-      }
-      const profileJson = await profileRes.json();
-      log('Profile JSON keys:', Object.keys(profileJson));
-
-      const lsp3Data = profileJson.LSP3Profile || profileJson;
-
-      let avatarUrl: string | undefined;
-      if (lsp3Data.profileImage && Array.isArray(lsp3Data.profileImage) && lsp3Data.profileImage.length > 0) {
-        const img = lsp3Data.profileImage[0];
-        if (img.url && typeof img.url === 'string') {
-          if (img.url.startsWith('ipfs://')) {
-            avatarUrl = IPFS_GATEWAY + img.url.replace('ipfs://', '');
-          } else if (img.url.startsWith('https://') || img.url.startsWith('http://')) {
-            avatarUrl = img.url;
-          }
-        }
-      }
-
-      log('Name:', lsp3Data.name);
-      log('Avatar URL:', avatarUrl);
+      // 画像の選択：最小サイズ（アイコン用）
+      const images = profileData.profileImages || [];
+      const avatarUrl = images.length > 0
+        ? images.sort((a: any, b: any) => a.width - b.width)[0].url
+        : undefined;
 
       setProfile({
-        name: lsp3Data.name || 'Unknown',
+        name: profileData.fullName || profileData.name || 'Unknown',
         avatarUrl,
       });
     } catch (e) {
-      log('Profile fetch error:', e);
+      console.error('Profile fetch error:', e);
       setProfile({ name: 'Unknown' });
+    } finally {
+      setLoading(false);
     }
-  }, [log]);
+  };
 
-  const fetchBirthday = useCallback(async (addr: string) => {
-    setLoading(true);
-    setError(null);
+  const fetchBirthday = async (addr: string) => {
     try {
       const addrRes = await fetch(
         `https://explorer.execution.mainnet.lukso.network/api/v2/addresses/${addr}`
@@ -156,235 +153,458 @@ function App() {
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      setLoading(false);
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    log('=== App mounted ===');
+  const handleManualCheck = () => {
+    if (!inputAddress.startsWith('0x')) {
+      setError('Please enter a valid LUKSO address (0x...)');
+      return;
+    }
+    const addr = inputAddress.toLowerCase();
+    setAddress(addr);
+    setMode('manual');
+    fetchProfile(addr);
+    fetchBirthday(addr);
+  };
 
-    // Provider 初期化を遅延させる
-    const initProvider = async () => {
-      log('Creating provider...');
-      
-      // 少し待ってから初期化（Grid からのメッセージを待つ）
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      const provider = createClientUPProvider();
-      
-      log('Provider created');
-      log('Provider type:', typeof provider);
-      log('Provider accounts:', provider.accounts);
-      log('Provider contextAccounts:', provider.contextAccounts);
-
-      // アドレスを取得
-      const accounts = provider.accounts as string[];
-      const contextAccounts = provider.contextAccounts as string[];
-
-      log('Accounts array:', accounts);
-      log('Context array:', contextAccounts);
-      log('Accounts length:', accounts?.length);
-      log('Context length:', contextAccounts?.length);
-
-      const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
-
-      log('Selected address:', upAddress);
-
-      if (upAddress) {
-        setAddress(upAddress);
-        fetchProfile(upAddress);
-        fetchBirthday(upAddress);
-      } else {
-        log('⚠️ No address available!');
-        log('Checking if in iframe...');
-        log('window === window.parent:', window === window.parent);
-        log('window.location.ancestorOrigins:', Array.from(window.location.ancestorOrigins || []));
-      }
-
-      // イベントリスナー
-      const handleAccountsChanged = (newAccounts: string[]) => {
-        log('accountsChanged:', newAccounts);
-        if (newAccounts.length > 0) {
-          setAddress(newAccounts[0]);
-          fetchProfile(newAccounts[0]);
-          fetchBirthday(newAccounts[0]);
-        }
-      };
-
-      const handleContextAccountsChanged = (newContextAccounts: string[]) => {
-        log('contextAccountsChanged:', newContextAccounts);
-        if (newContextAccounts.length > 0) {
-          setAddress(newContextAccounts[0]);
-          fetchProfile(newContextAccounts[0]);
-          fetchBirthday(newContextAccounts[0]);
-        }
-      };
-
-      provider.on('accountsChanged', handleAccountsChanged);
-      provider.on('contextAccountsChanged', handleContextAccountsChanged);
-
-      setProviderReady(true);
-      log('Provider ready!');
-
-      // クリーンアップ
-      return () => {
-        log('Cleaning up event listeners...');
-        provider.removeListener('accountsChanged', handleAccountsChanged);
-        provider.removeListener('contextAccountsChanged', handleContextAccountsChanged);
-      };
-    };
-
-    const cleanup = initProvider();
-
-    return () => {
-      cleanup.then(fn => fn?.());
-    };
-  }, [fetchProfile, fetchBirthday, log]);
+  const handleReset = () => {
+    setAddress(null);
+    setInputAddress('');
+    setProfile(null);
+    setBirthday(null);
+    setError(null);
+    setMode('manual');
+  };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'system-ui, sans-serif', maxWidth: '600px', margin: '0 auto' }}>
-      <h2 style={{ marginBottom: '16px', textAlign: 'center' }}>
-        <span style={{ fontFamily: '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif' }}>🎂</span> UP Birthday
-      </h2>
-
-      {/* デバッグ情報 */}
-      <div style={{ marginBottom: '20px', padding: '10px', background: 'rgba(255,0,85,0.1)', borderRadius: '8px', fontSize: '0.65rem', fontFamily: 'monospace', maxHeight: '300px', overflowY: 'auto' }}>
-        <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Debug Log:</div>
-        <div style={{ color: providerReady ? '#4ade80' : '#fbbf24' }}>
-          Provider Ready: {providerReady ? '✅ Yes' : '⏳ Loading...'}
-        </div>
-        <div style={{ color: address ? '#4ade80' : '#ef4444' }}>
-          Address: {address || '❌ Not set'}
-        </div>
-        <hr style={{ margin: '8px 0', borderColor: 'rgba(255,255,255,0.2)' }} />
-        {debugInfo.map((line, i) => (
-          <div key={i} style={{ marginBottom: '2px' }}>{line}</div>
-        ))}
+    <div style={styles.container}>
+      {/* ヘッダー */}
+      <div style={styles.header}>
+        <h1 style={styles.title}>
+          <span style={{ fontFamily: '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif' }}>🆙</span> Birthday
+        </h1>
+        <p style={styles.subtitle}>
+          {mode === 'grid' && '📱 Grid Mode'}
+          {mode === 'manual' && '🔍 Manual Mode'}
+          {mode === 'url' && '🔗 Shared Mode'}
+        </p>
       </div>
 
-      {profile && (
-        <div style={{ marginBottom: '20px', padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {profile.avatarUrl ? (
-            <img
-              src={profile.avatarUrl}
-              alt={profile.name}
-              style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', background: '#333' }}
-              onError={(e) => {
-                log('Image load error');
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
+      {/* アドレス入力フォーム（Grid/URL 以外） */}
+      {!address && mode === 'manual' && (
+        <div style={styles.inputSection}>
+          <p style={styles.inputLabel}>Enter your LUKSO Universal Profile address</p>
+          <div style={styles.inputGroup}>
+            <input
+              type="text"
+              value={inputAddress}
+              onChange={(e) => setInputAddress(e.target.value)}
+              placeholder="0x5bA145ebB07e603328285A04589da2a7A202fCED"
+              style={styles.input}
+              onKeyDown={(e) => e.key === 'Enter' && handleManualCheck()}
             />
-          ) : (
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 'bold', color: '#fff' }}>
-              {profile.name.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div>
-            <div style={{ fontSize: '0.75rem', color: '#888' }}>Universal Profile</div>
-            <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{profile.name}</div>
+            <button onClick={handleManualCheck} style={styles.button}>
+              Check
+            </button>
           </div>
+          <p style={styles.hint}>
+            💡 Tip: Add <code style={styles.code}>?address=0x...</code> to the URL to share
+          </p>
         </div>
       )}
 
-      {address && (
-        <div style={{ marginBottom: '20px', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', fontSize: '0.75rem', wordBreak: 'break-all', textAlign: 'center' }}>
-          <span style={{ color: '#888' }}>Address: </span>
-          <span style={{ color: '#ff0055' }}>{address}</span>
-        </div>
-      )}
-
+      {/* ローディング */}
       {loading && (
-        <div style={{ padding: '15px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px', textAlign: 'center' }}>
-          <p style={{ margin: 0 }}>🎈 Checking your birthday...</p>
+        <div style={styles.loadingCard}>
+          <div style={styles.loadingSpinner}>🎈</div>
+          <p style={styles.loadingText}>Fetching your birthday...</p>
         </div>
       )}
 
+      {/* エラー */}
       {error && (
-        <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(255,0,85,0.1)', borderRadius: '12px' }}>
-          <p style={{ margin: 0, color: '#d00' }}>⚠️ {error}</p>
+        <div style={styles.errorCard}>
+          <span style={styles.errorIcon}>⚠️</span>
+          <p style={styles.errorText}>{error}</p>
+          <button onClick={handleReset} style={styles.resetButton}>
+            Reset
+          </button>
         </div>
       )}
 
+      {/* プロフィール表示 */}
+      {profile && address && (
+        <div style={styles.profileCard}>
+          <div style={styles.profileHeader}>
+            {profile.avatarUrl ? (
+              <img
+                src={profile.avatarUrl}
+                alt={profile.name}
+                style={styles.avatar}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <div style={styles.avatarPlaceholder}>
+                {profile.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div style={styles.profileInfo}>
+              <div style={styles.profileLabel}>Universal Profile</div>
+              <div style={styles.profileName}>{profile.name}</div>
+            </div>
+          </div>
+
+          <div style={styles.addressBox}>
+            <span style={styles.addressLabel}>Address</span>
+            <span style={styles.addressValue}>{address}</span>
+          </div>
+
+          <button onClick={handleReset} style={styles.resetButtonSmall}>
+            🔍 Check Another
+          </button>
+        </div>
+      )}
+
+      {/* 誕生日情報 */}
       {birthday && (
-        <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px' }}>
-          <div style={{ marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
-            <span style={{ fontSize: '0.75rem', color: '#666', display: 'block' }}>🎉 Created At (UTC)</span>
-            <b>{birthday.utc}</b>
+        <div style={styles.birthdayCard}>
+          <div style={styles.birthdayHeader}>
+            <span style={styles.birthdayIcon}>🎂</span>
+            <span style={styles.birthdayTitle}>Your UP Birthday</span>
           </div>
-          <div style={{ marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
-            <span style={{ fontSize: '0.75rem', color: '#666', display: 'block' }}>🕐 Local Time</span>
-            <b>{birthday.local}</b>
+
+          <div style={styles.birthdayItem}>
+            <span style={styles.birthdayLabel}>🎉 Created At (UTC)</span>
+            <b style={styles.birthdayValue}>{birthday.utc}</b>
           </div>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: '#666', display: 'block' }}>📝 Creation Transaction</span>
-            <a href={birthday.txUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#ff0055', wordBreak: 'break-all' }}>
-              {birthday.txHash}
+
+          <div style={styles.birthdayItem}>
+            <span style={styles.birthdayLabel}>🕐 Local Time</span>
+            <b style={styles.birthdayValue}>{birthday.local}</b>
+          </div>
+
+          <div style={styles.birthdayItem}>
+            <span style={styles.birthdayLabel}>📝 Creation Transaction</span>
+            <a
+              href={birthday.txUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.txLink}
+            >
+              {birthday.txHash.slice(0, 10)}...{birthday.txHash.slice(-8)}
             </a>
           </div>
+
+          <div style={styles.footer}>
+            <span style={styles.footerEmoji}>🆙</span>
+            <span style={styles.footerText}>Built with ❤️ for LUKSO</span>
+          </div>
         </div>
       )}
 
-      {!address && !loading && (
-        <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px', textAlign: 'center' }}>
-          <p style={{ margin: 0, color: '#666' }}>Connecting to Universal Profile...</p>
+      {!address && !loading && mode !== 'manual' && (
+        <div style={styles.connectingCard}>
+          <p style={styles.connectingText}>Connecting to Universal Profile...</p>
         </div>
       )}
     </div>
   );
 }
 
-function decodeVerifiableURI(hex: string): { hashFunction: string; hash: string; url: string } {
-  if (!hex || hex === '0x') {
-    return { hashFunction: '', hash: '', url: '' };
-  }
-
-  // VerifiableURI 構造:
-  // 0x (プレフィックス)
-  // 0000 (verificationMethod: 0 = keccak256)
-  // 6f357c6a (hashFunction: 4 bytes)
-  // 0020 (hashLength: 32 bytes = 64 hex chars)
-  // [64 hex chars hash]
-  // [url as UTF-8 hex]
-
-  // ヘッダー: 0x + 0000 + 6f357c6a + 0020 = 10 + 8 = 18 chars (0x 含む)
-  // 実際には: 0x00006f357c6a0020 = 18 chars
-  
-  if (hex.length < 18) {
-    console.error('VerifiableURI too short:', hex);
-    return { hashFunction: '', hash: '', url: '' };
-  }
-
-  const verificationMethod = hex.slice(2, 6); // 0000
-  const hashFunctionHex = hex.slice(6, 14); // 6f357c6a
-  const hashLengthHex = hex.slice(14, 18); // 0020
-  
-  const hashLength = parseInt(hashLengthHex, 16) * 2; // 32 * 2 = 64
-  const hash = '0x' + hex.slice(18, 18 + hashLength);
-  const urlHex = hex.slice(18 + hashLength);
-
-  console.log('Verification method:', verificationMethod);
-  console.log('Hash function:', hashFunctionHex);
-  console.log('Hash length:', hashLength);
-  console.log('Hash:', hash);
-  console.log('URL hex length:', urlHex.length);
-  console.log('URL hex (first 100):', urlHex.slice(0, 100));
-
-  let url = '';
-  for (let i = 0; i < urlHex.length; i += 2) {
-    const code = parseInt(urlHex.slice(i, i + 2), 16);
-    if (code > 0) { // .null 文字をスキップ
-      url += String.fromCharCode(code);
-    }
-  }
-
-  console.log('Decoded URL:', url);
-
-  return {
-    hashFunction: hashFunctionHex === '6f357c6a' ? 'keccak256(utf8)' : 'unknown',
-    hash,
-    url,
-  };
-}
+// 🆙ちゃんカラー：スタイリッシュ・ダークテーマ
+const styles: { [key: string]: React.CSSProperties } = {
+  container: {
+    minHeight: '100vh',
+    padding: '24px 16px',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%)',
+    color: '#ffffff',
+  },
+  header: {
+    textAlign: 'center',
+    marginBottom: '32px',
+  },
+  title: {
+    margin: '0 0 8px 0',
+    fontSize: '2.5rem',
+    fontWeight: '800',
+    background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 50%, #ff0055 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+    letterSpacing: '-0.02em',
+  },
+  subtitle: {
+    margin: 0,
+    fontSize: '0.9rem',
+    color: '#8888aa',
+    fontWeight: '500',
+  },
+  inputSection: {
+    maxWidth: '500px',
+    margin: '0 auto 32px',
+    padding: '24px',
+    background: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+  },
+  inputLabel: {
+    margin: '0 0 16px 0',
+    fontSize: '0.95rem',
+    color: '#aaaacc',
+    textAlign: 'center',
+  },
+  inputGroup: {
+    display: 'flex',
+    gap: '12px',
+  },
+  input: {
+    flex: 1,
+    padding: '14px 18px',
+    fontSize: '0.9rem',
+    fontFamily: 'monospace',
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '12px',
+    color: '#ffffff',
+    outline: 'none',
+    transition: 'border-color 0.2s',
+  },
+  button: {
+    padding: '14px 28px',
+    fontSize: '0.95rem',
+    fontWeight: '700',
+    background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 100%)',
+    border: 'none',
+    borderRadius: '12px',
+    color: '#ffffff',
+    cursor: 'pointer',
+    transition: 'transform 0.2s, box-shadow 0.2s',
+    whiteSpace: 'nowrap',
+  },
+  hint: {
+    margin: '16px 0 0 0',
+    fontSize: '0.8rem',
+    color: '#666688',
+    textAlign: 'center',
+  },
+  code: {
+    background: 'rgba(255, 255, 255, 0.1)',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    fontFamily: 'monospace',
+    fontSize: '0.75rem',
+  },
+  loadingCard: {
+    maxWidth: '500px',
+    margin: '0 auto',
+    padding: '40px 24px',
+    background: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    textAlign: 'center',
+  },
+  loadingSpinner: {
+    fontSize: '3rem',
+    marginBottom: '16px',
+    animation: 'bounce 1s infinite',
+  },
+  loadingText: {
+    margin: 0,
+    color: '#aaaacc',
+    fontSize: '1rem',
+  },
+  errorCard: {
+    maxWidth: '500px',
+    margin: '0 auto',
+    padding: '20px 24px',
+    background: 'rgba(255, 0, 85, 0.1)',
+    borderRadius: '16px',
+    border: '1px solid rgba(255, 0, 85, 0.3)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  errorIcon: {
+    fontSize: '1.5rem',
+  },
+  errorText: {
+    margin: 0,
+    flex: 1,
+    color: '#ff6b9d',
+    fontSize: '0.95rem',
+  },
+  resetButton: {
+    padding: '10px 20px',
+    fontSize: '0.85rem',
+    fontWeight: '600',
+    background: 'rgba(255, 255, 255, 0.1)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: '10px',
+    color: '#ffffff',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+  },
+  profileCard: {
+    maxWidth: '500px',
+    margin: '0 auto 24px',
+    padding: '24px',
+    background: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+  },
+  profileHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    marginBottom: '20px',
+  },
+  avatar: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '3px solid rgba(255, 0, 85, 0.3)',
+  },
+  avatarPlaceholder: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '1.8rem',
+    fontWeight: 'bold',
+    color: '#ffffff',
+    border: '3px solid rgba(255, 255, 255, 0.2)',
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileLabel: {
+    fontSize: '0.75rem',
+    color: '#8888aa',
+    marginBottom: '4px',
+  },
+  profileName: {
+    fontSize: '1.3rem',
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  addressBox: {
+    padding: '14px 18px',
+    background: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: '12px',
+    marginBottom: '16px',
+  },
+  addressLabel: {
+    display: 'block',
+    fontSize: '0.7rem',
+    color: '#666688',
+    marginBottom: '6px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  addressValue: {
+    display: 'block',
+    fontSize: '0.8rem',
+    fontFamily: 'monospace',
+    color: '#ff6b9d',
+    wordBreak: 'break-all',
+  },
+  resetButtonSmall: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '0.9rem',
+    fontWeight: '600',
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '12px',
+    color: '#aaaacc',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+  },
+  birthdayCard: {
+    maxWidth: '500px',
+    margin: '0 auto',
+    padding: '28px 24px',
+    background: 'linear-gradient(135deg, rgba(255, 0, 85, 0.08) 0%, rgba(255, 107, 157, 0.05) 100%)',
+    borderRadius: '20px',
+    border: '1px solid rgba(255, 0, 85, 0.2)',
+  },
+  birthdayHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+    marginBottom: '24px',
+  },
+  birthdayIcon: {
+    fontSize: '2rem',
+  },
+  birthdayTitle: {
+    fontSize: '1.4rem',
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  birthdayItem: {
+    padding: '16px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+  },
+  birthdayLabel: {
+    display: 'block',
+    fontSize: '0.8rem',
+    color: '#8888aa',
+    marginBottom: '8px',
+  },
+  birthdayValue: {
+    display: 'block',
+    fontSize: '1rem',
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  txLink: {
+    display: 'block',
+    fontSize: '0.85rem',
+    color: '#ff6b9d',
+    textDecoration: 'none',
+    fontFamily: 'monospace',
+    transition: 'color 0.2s',
+  },
+  footer: {
+    marginTop: '24px',
+    paddingTop: '20px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+  },
+  footerEmoji: {
+    fontSize: '1.2rem',
+  },
+  footerText: {
+    fontSize: '0.85rem',
+    color: '#666688',
+  },
+  connectingCard: {
+    maxWidth: '500px',
+    margin: '0 auto',
+    padding: '40px 24px',
+    background: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    textAlign: 'center',
+  },
+  connectingText: {
+    margin: 0,
+    color: '#aaaacc',
+    fontSize: '1rem',
+  },
+};
 
 export default App;
