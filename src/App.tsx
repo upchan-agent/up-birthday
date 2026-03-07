@@ -39,6 +39,7 @@ function App() {
   const [birthday, setBirthday] = useState<BirthdayData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [manualMode, setManualMode] = useState(false);
 
   // URL パラメータからアドレスを取得
   useEffect(() => {
@@ -47,6 +48,7 @@ function App() {
     if (addrParam && addrParam.startsWith('0x')) {
       setInputAddress(addrParam);
       setAddress(addrParam.toLowerCase() as `0x${string}`);
+      setManualMode(true);
       fetchProfile(addrParam);
       fetchBirthday(addrParam);
     }
@@ -54,6 +56,9 @@ function App() {
 
   // Grid 経由の接続を監視
   useEffect(() => {
+    // 手動モード中は Grid 接続を無視
+    if (manualMode) return;
+
     const provider = createClientUPProvider();
 
     const accounts = provider.accounts as string[];
@@ -69,6 +74,7 @@ function App() {
     }
 
     const handleAccountsChanged = (newAccounts: string[]) => {
+      if (manualMode) return;
       if (newAccounts.length > 0 && !address) {
         setInputAddress(newAccounts[0]);
         setAddress(newAccounts[0]);
@@ -78,6 +84,7 @@ function App() {
     };
 
     const handleContextAccountsChanged = (newContextAccounts: string[]) => {
+      if (manualMode) return;
       if (newContextAccounts.length > 0 && !address) {
         setInputAddress(newContextAccounts[0]);
         setAddress(newContextAccounts[0]);
@@ -93,7 +100,7 @@ function App() {
       provider.removeListener('accountsChanged', handleAccountsChanged);
       provider.removeListener('contextAccountsChanged', handleContextAccountsChanged);
     };
-  }, [address]);
+  }, [address, manualMode]);
 
   const fetchProfile = async (addr: string) => {
     setLoading(true);
@@ -176,6 +183,7 @@ function App() {
     }
     const addr = inputAddress.toLowerCase();
     setAddress(addr);
+    setManualMode(true);
     fetchProfile(addr);
     fetchBirthday(addr);
   };
@@ -186,6 +194,7 @@ function App() {
     setProfile(null);
     setBirthday(null);
     setError(null);
+    setManualMode(false);
   };
 
   return (
@@ -334,6 +343,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
     padding: '32px 16px',
     fontFamily: 'inherit',
+    background: '#fff9fb',
     color: '#2d2d44',
     overflowX: 'hidden',
     boxSizing: 'border-box',
@@ -370,10 +380,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '520px',
     margin: '0 auto 40px',
     padding: '32px',
-    background: 'rgba(255, 255, 255, 0.9)',
+    background: '#ffffff',
     borderRadius: '24px',
-    border: '2px solid rgba(255, 107, 157, 0.2)',
-    boxShadow: '0 8px 32px rgba(255, 107, 157, 0.15)',
+    border: '2px solid #ffd6e7',
+    boxShadow: '0 4px 20px rgba(255, 107, 157, 0.08)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -423,9 +433,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '500px',
     margin: '0 auto',
     padding: '48px 24px',
-    background: 'rgba(255, 255, 255, 0.9)',
+    background: '#ffffff',
     borderRadius: '24px',
-    border: '2px solid rgba(255, 107, 157, 0.2)',
+    border: '2px solid #ffd6e7',
     textAlign: 'center',
   },
   loadingSpinner: {
@@ -442,9 +452,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '500px',
     margin: '0 auto',
     padding: '24px 28px',
-    background: 'rgba(255, 240, 245, 0.95)',
+    background: '#fff5f8',
     borderRadius: '20px',
-    border: '2px solid rgba(255, 107, 157, 0.3)',
+    border: '2px solid #ffb3c6',
     display: 'flex',
     alignItems: 'center',
     gap: '14px',
@@ -475,10 +485,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '520px',
     margin: '0 auto 24px',
     padding: '28px',
-    background: 'rgba(255, 255, 255, 0.95)',
+    background: '#ffffff',
     borderRadius: '24px',
-    border: '2px solid rgba(255, 107, 157, 0.2)',
-    boxShadow: '0 8px 32px rgba(255, 107, 157, 0.12)',
+    border: '2px solid #ffd6e7',
+    boxShadow: '0 4px 20px rgba(255, 107, 157, 0.08)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -543,10 +553,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '520px',
     margin: '0 auto',
     padding: '32px 28px',
-    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 240, 245, 0.9) 100%)',
+    background: '#ffffff',
     borderRadius: '24px',
-    border: '2px solid rgba(255, 107, 157, 0.25)',
-    boxShadow: '0 8px 32px rgba(255, 107, 157, 0.15)',
+    border: '2px solid #ffd6e7',
+    boxShadow: '0 4px 20px rgba(255, 107, 157, 0.08)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -559,9 +569,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '10px',
     padding: '10px 20px',
-    background: 'linear-gradient(135deg, #fff5f8 0%, #ffe4ec 100%)',
+    background: '#fff5f8',
     borderRadius: '20px',
-    border: '2px solid rgba(255, 107, 157, 0.2)',
+    border: '2px solid #ffd6e7',
   },
   birthdayCake: {
     fontSize: '1.6rem',
@@ -574,7 +584,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   birthdayItem: {
     padding: '18px 0',
-    borderBottom: '2px dashed rgba(255, 107, 157, 0.15)',
+    borderBottom: '2px dashed #ffd6e7',
     textAlign: 'center',
   },
   birthdayLabel: {
@@ -605,6 +615,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   footerContainer: {
     marginTop: '48px',
     paddingTop: '28px',
+    borderTop: '2px dashed #ffd6e7',
   },
   footer: {
     display: 'flex',
