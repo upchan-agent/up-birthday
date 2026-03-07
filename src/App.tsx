@@ -40,11 +40,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'grid' | 'manual' | 'url'>('manual');
-  const [debugLog, setDebugLog] = useState<string[]>([]);
 
-  const addLog = (msg: string) => {
-    setDebugLog(prev => [...prev.slice(-4), `[${new Date().toLocaleTimeString()}] ${msg}`]);
-  };
 
   // URL パラメータからアドレスを取得
   useEffect(() => {
@@ -53,11 +49,8 @@ function App() {
     if (addrParam && addrParam.startsWith('0x')) {
       setAddress(addrParam.toLowerCase() as `0x${string}`);
       setMode('url');
-      addLog(`URL mode: ${addrParam}`);
       fetchProfile(addrParam);
       fetchBirthday(addrParam);
-    } else {
-      addLog('No URL parameter');
     }
   }, []);
 
@@ -68,21 +61,16 @@ function App() {
     const accounts = provider.accounts as string[];
     const contextAccounts = provider.contextAccounts as string[];
 
-    addLog(`Grid accounts: ${accounts?.length || 0}`);
-    addLog(`Grid context: ${contextAccounts?.length || 0}`);
-
     const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
 
     if (upAddress && !address) {
       setAddress(upAddress);
       setMode('grid');
-      addLog(`Grid mode: ${upAddress}`);
       fetchProfile(upAddress);
       fetchBirthday(upAddress);
     }
 
     const handleAccountsChanged = (newAccounts: string[]) => {
-      addLog(`accountsChanged: ${newAccounts}`);
       if (newAccounts.length > 0 && !address) {
         setAddress(newAccounts[0]);
         setMode('grid');
@@ -92,7 +80,6 @@ function App() {
     };
 
     const handleContextAccountsChanged = (newContextAccounts: string[]) => {
-      addLog(`contextAccountsChanged: ${newContextAccounts}`);
       if (newContextAccounts.length > 0 && !address) {
         setAddress(newContextAccounts[0]);
         setMode('grid');
@@ -113,21 +100,15 @@ function App() {
   const fetchProfile = async (addr: string) => {
     setLoading(true);
     setError(null);
-    addLog(`Fetching profile: ${addr}`);
     try {
       const data = await request(GRAPHQL_ENDPOINT, GET_PROFILE_QUERY, { address: addr.toLowerCase() });
-      addLog(`Indexer response: ${JSON.stringify(data).slice(0, 200)}`);
       
       const profileData = data.Profile?.[0];
 
       if (!profileData) {
-        addLog('No profile data found');
         setProfile({ name: 'Unknown' });
         return;
       }
-
-      addLog(`Profile name: ${profileData.fullName || profileData.name}`);
-      addLog(`Profile images: ${profileData.profileImages?.length || 0}`);
 
       // 画像の選択：最小サイズ（アイコン用）
       const images = profileData.profileImages || [];
@@ -145,11 +126,6 @@ function App() {
         } else {
           avatarUrl = rawUrl;
         }
-        
-        addLog(`Selected image (raw): ${rawUrl} (${sorted[0].width}x${sorted[0].height})`);
-        addLog(`Selected image (gateway): ${avatarUrl}`);
-      } else {
-        addLog('No images available');
       }
 
       setProfile({
@@ -157,7 +133,6 @@ function App() {
         avatarUrl,
       });
     } catch (e: any) {
-      addLog(`Profile fetch error: ${e.message || e}`);
       console.error('Profile fetch error:', e);
       setProfile({ name: 'Unknown' });
     } finally {
@@ -214,7 +189,6 @@ function App() {
     setProfile(null);
     setBirthday(null);
     setError(null);
-    setDebugLog([]);
     setMode('manual');
   };
 
@@ -225,6 +199,7 @@ function App() {
         <h1 style={styles.titleWrapper}>
           <span style={styles.emoji}>🆙</span>
           <span style={styles.titleText}>Birthday</span>
+          <span style={styles.emoji}>🎂</span>
         </h1>
         <p style={styles.subtitle}>
           {mode === 'grid' && '📱 Grid Mode'}
@@ -232,16 +207,6 @@ function App() {
           {mode === 'url' && '🔗 Shared Mode'}
         </p>
       </div>
-
-      {/* デバッグログ（開発用） */}
-      {debugLog.length > 0 && (
-        <div style={styles.debugLog}>
-          <div style={styles.debugTitle}>Debug Log:</div>
-          {debugLog.map((line, i) => (
-            <div key={i} style={styles.debugLine}>{line}</div>
-          ))}
-        </div>
-      )}
 
       {/* アドレス入力フォーム（Grid/URL 以外） */}
       {!address && mode === 'manual' && (
@@ -261,6 +226,7 @@ function App() {
             </button>
           </div>
           <p style={styles.hint}>
+            📱 UniversalEverything Grid automatically detects your address<br />
             💡 Tip: Add <code style={styles.code}>?address=0x...</code> to the URL to share
           </p>
         </div>
@@ -295,10 +261,8 @@ function App() {
                 alt={profile.name}
                 style={styles.avatar}
                 onError={(e) => {
-                  addLog(`Image load error: ${profile.avatarUrl}`);
                   (e.target as HTMLImageElement).style.display = 'none';
                 }}
-                onLoad={() => addLog(`Image loaded: ${profile.avatarUrl}`)}
               />
             ) : (
               <div style={styles.avatarPlaceholder}>
@@ -352,10 +316,6 @@ function App() {
             </a>
           </div>
 
-          <div style={styles.footer}>
-            <span style={styles.footerEmoji}>🆙</span>
-            <span style={styles.footerText}>Built with ❤️ for LUKSO</span>
-          </div>
         </div>
       )}
 
@@ -364,6 +324,22 @@ function App() {
           <p style={styles.connectingText}>Connecting to Universal Profile...</p>
         </div>
       )}
+
+      {/* フッター（常に表示） */}
+      <div style={styles.footerContainer}>
+        <div style={styles.footer}>
+          <span style={styles.footerText}>Built with </span>
+          <span style={styles.footerHeart}>❤️</span>
+          <span style={styles.footerText}> by </span>
+          <a href="https://profile.link/🆙chan@bcA4" target="_blank" rel="noopener noreferrer" style={styles.footerLink}>
+            <span style={styles.footerEmoji}>🆙</span>chan
+          </a>
+          <span style={styles.footerSeparator}>|</span>
+          <a href="https://x.com/UPchan_lyx" target="_blank" rel="noopener noreferrer" style={styles.footerLink}>
+            <span style={styles.footerX}>𝕏</span>
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
@@ -394,7 +370,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   emoji: {
     fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
     fontVariantEmoji: 'emoji',
-    marginRight: '8px',
+    margin: '0 8px',
   },
   titleText: {
     background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 50%, #ff0055 100%)',
@@ -407,28 +383,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '0.9rem',
     color: '#8888aa',
     fontWeight: '500',
-  },
-  debugLog: {
-    maxWidth: '500px',
-    margin: '0 auto 20px',
-    padding: '12px 16px',
-    background: 'rgba(255, 0, 85, 0.1)',
-    borderRadius: '12px',
-    border: '1px solid rgba(255, 0, 85, 0.2)',
-    fontSize: '0.7rem',
-    fontFamily: 'monospace',
-    color: '#ff6b9d',
-    overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch',
-  },
-  debugTitle: {
-    fontWeight: 'bold',
-    marginBottom: '6px',
-    opacity: 0.8,
-  },
-  debugLine: {
-    marginBottom: '2px',
-    whiteSpace: 'nowrap',
   },
   inputSection: {
     maxWidth: '500px',
@@ -487,6 +441,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#666688',
     textAlign: 'center',
     wordBreak: 'break-word',
+    lineHeight: 1.6,
   },
   code: {
     background: 'rgba(255, 255, 255, 0.1)',
@@ -684,23 +639,48 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontFamily: 'monospace',
     transition: 'color 0.2s',
   },
-  footer: {
-    marginTop: '24px',
-    paddingTop: '20px',
+  footerContainer: {
+    marginTop: '32px',
+    paddingTop: '24px',
     borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+  },
+  footer: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
-  },
-  footerEmoji: {
-    fontSize: '1.2rem',
-    fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
-    fontVariantEmoji: 'emoji',
+    gap: '6px',
+    flexWrap: 'wrap',
   },
   footerText: {
     fontSize: '0.85rem',
     color: '#666688',
+  },
+  footerHeart: {
+    fontSize: '0.9rem',
+  },
+  footerEmoji: {
+    fontSize: '1.1rem',
+    fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
+    fontVariantEmoji: 'emoji',
+  },
+  footerLink: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    color: '#ff6b9d',
+    textDecoration: 'none',
+    fontSize: '0.85rem',
+    fontWeight: '500',
+    transition: 'opacity 0.2s',
+  },
+  footerSeparator: {
+    color: '#444466',
+    fontSize: '0.85rem',
+  },
+  footerX: {
+    fontSize: '0.9rem',
+    fontFamily: 'system-ui, sans-serif',
+    color: '#ffffff',
   },
   connectingCard: {
     maxWidth: '500px',
