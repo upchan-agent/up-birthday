@@ -39,16 +39,14 @@ function App() {
   const [birthday, setBirthday] = useState<BirthdayData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'grid' | 'manual' | 'url'>('manual');
-
 
   // URL パラメータからアドレスを取得
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const addrParam = params.get('address');
     if (addrParam && addrParam.startsWith('0x')) {
+      setInputAddress(addrParam);
       setAddress(addrParam.toLowerCase() as `0x${string}`);
-      setMode('url');
       fetchProfile(addrParam);
       fetchBirthday(addrParam);
     }
@@ -64,16 +62,16 @@ function App() {
     const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
 
     if (upAddress && !address) {
+      setInputAddress(upAddress);
       setAddress(upAddress);
-      setMode('grid');
       fetchProfile(upAddress);
       fetchBirthday(upAddress);
     }
 
     const handleAccountsChanged = (newAccounts: string[]) => {
       if (newAccounts.length > 0 && !address) {
+        setInputAddress(newAccounts[0]);
         setAddress(newAccounts[0]);
-        setMode('grid');
         fetchProfile(newAccounts[0]);
         fetchBirthday(newAccounts[0]);
       }
@@ -81,8 +79,8 @@ function App() {
 
     const handleContextAccountsChanged = (newContextAccounts: string[]) => {
       if (newContextAccounts.length > 0 && !address) {
+        setInputAddress(newContextAccounts[0]);
         setAddress(newContextAccounts[0]);
-        setMode('grid');
         fetchProfile(newContextAccounts[0]);
         fetchBirthday(newContextAccounts[0]);
       }
@@ -171,14 +169,13 @@ function App() {
     }
   };
 
-  const handleManualCheck = () => {
+  const handleCheck = () => {
     if (!inputAddress.startsWith('0x')) {
       setError('Please enter a valid LUKSO address (0x...)');
       return;
     }
     const addr = inputAddress.toLowerCase();
     setAddress(addr);
-    setMode('manual');
     fetchProfile(addr);
     fetchBirthday(addr);
   };
@@ -189,7 +186,6 @@ function App() {
     setProfile(null);
     setBirthday(null);
     setError(null);
-    setMode('manual');
   };
 
   return (
@@ -202,16 +198,14 @@ function App() {
           <span style={styles.emoji}>🎂</span>
         </h1>
         <p style={styles.subtitle}>
-          {mode === 'grid' && '📱 Grid Mode'}
-          {mode === 'manual' && '🔍 Manual Mode'}
-          {mode === 'url' && '🔗 Shared Mode'}
+          Discover when your Universal Profile was born
         </p>
       </div>
 
-      {/* アドレス入力フォーム（Grid/URL 以外） */}
-      {!address && mode === 'manual' && (
+      {/* アドレス入力フォーム */}
+      {!address && (
         <div style={styles.inputSection}>
-          <p style={styles.inputLabel}>Enter your LUKSO Universal Profile address</p>
+          <p style={styles.inputLabel}>Enter LUKSO Universal Profile address</p>
           <div style={styles.inputGroup}>
             <input
               type="text"
@@ -219,16 +213,12 @@ function App() {
               onChange={(e) => setInputAddress(e.target.value)}
               placeholder="0x5bA145ebB07e603328285A04589da2a7A202fCED"
               style={styles.input}
-              onKeyDown={(e) => e.key === 'Enter' && handleManualCheck()}
+              onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
             />
-            <button onClick={handleManualCheck} style={styles.button}>
+            <button onClick={handleCheck} style={styles.button}>
               Check
             </button>
           </div>
-          <p style={styles.hint}>
-            📱 UniversalEverything Grid automatically detects your address<br />
-            💡 Tip: Add <code style={styles.code}>?address=0x...</code> to the URL to share
-          </p>
         </div>
       )}
 
@@ -270,14 +260,9 @@ function App() {
               </div>
             )}
             <div style={styles.profileInfo}>
-              <div style={styles.profileLabel}>Universal Profile</div>
               <div style={styles.profileName}>{profile.name}</div>
+              <div style={styles.addressValue}>{address}</div>
             </div>
-          </div>
-
-          <div style={styles.addressBox}>
-            <span style={styles.addressLabel}>Address</span>
-            <span style={styles.addressValue}>{address}</span>
           </div>
 
           <button onClick={handleReset} style={styles.resetButtonSmall}>
@@ -290,22 +275,24 @@ function App() {
       {birthday && (
         <div style={styles.birthdayCard}>
           <div style={styles.birthdayHeader}>
-            <span style={styles.birthdayIcon}>🎂</span>
-            <span style={styles.birthdayTitle}>Your UP Birthday</span>
+            <div style={styles.birthdayTitleWrapper}>
+              <span style={styles.birthdayCake}>🎂</span>
+              <span style={styles.birthdayTitle}>Created</span>
+            </div>
           </div>
 
           <div style={styles.birthdayItem}>
-            <span style={styles.birthdayLabel}>🎉 Created At (UTC)</span>
+            <span style={styles.birthdayLabel}>🎉 UTC</span>
             <b style={styles.birthdayValue}>{birthday.utc}</b>
           </div>
 
           <div style={styles.birthdayItem}>
-            <span style={styles.birthdayLabel}>🕐 Local Time</span>
+            <span style={styles.birthdayLabel}>🕐 Local</span>
             <b style={styles.birthdayValue}>{birthday.local}</b>
           </div>
 
           <div style={styles.birthdayItem}>
-            <span style={styles.birthdayLabel}>📝 Creation Transaction</span>
+            <span style={styles.birthdayLabel}>📝 Transaction</span>
             <a
               href={birthday.txUrl}
               target="_blank"
@@ -315,13 +302,6 @@ function App() {
               {birthday.txHash.slice(0, 10)}...{birthday.txHash.slice(-8)}
             </a>
           </div>
-
-        </div>
-      )}
-
-      {!address && !loading && mode !== 'manual' && (
-        <div style={styles.connectingCard}>
-          <p style={styles.connectingText}>Connecting to Universal Profile...</p>
         </div>
       )}
 
@@ -344,55 +324,63 @@ function App() {
   );
 }
 
-// 🆙ちゃんカラー：スタイリッシュ・ダークテーマ
+// 🆙ちゃんカラー：明るくポップなデザイン
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     minHeight: '100vh',
     width: '100%',
-    padding: '24px 16px',
+    padding: '32px 16px',
     fontFamily: 'system-ui, -apple-system, sans-serif',
-    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%)',
-    color: '#ffffff',
+    background: 'linear-gradient(180deg, #fff5f8 0%, #ffe4ec 50%, #ffd6e7 100%)',
+    color: '#2d2d44',
     overflowX: 'hidden',
     boxSizing: 'border-box',
   },
   header: {
     textAlign: 'center',
-    marginBottom: '32px',
+    marginBottom: '40px',
   },
   titleWrapper: {
-    margin: '0 0 8px 0',
-    fontSize: 'clamp(1.8rem, 5vw, 2.5rem)',
+    margin: '0 0 12px 0',
+    fontSize: 'clamp(2rem, 6vw, 3rem)',
     fontWeight: '800',
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.03em',
     display: 'inline-block',
   },
   emoji: {
     fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
     fontVariantEmoji: 'emoji',
-    margin: '0 8px',
+    margin: '0 10px',
   },
   titleText: {
-    background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 50%, #ff0055 100%)',
+    background: 'linear-gradient(135deg, #ff6b9d 0%, #ff0055 50%, #ff6b9d 100%)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     backgroundClip: 'text',
   },
   subtitle: {
     margin: 0,
-    fontSize: '0.9rem',
-    color: '#8888aa',
+    fontSize: '1rem',
+    color: '#886677',
     fontWeight: '500',
   },
   inputSection: {
-    maxWidth: '500px',
-    margin: '0 auto 32px',
-    padding: '24px',
-    background: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: '20px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    maxWidth: '520px',
+    margin: '0 auto 40px',
+    padding: '32px',
+    background: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: '24px',
+    border: '2px solid rgba(255, 107, 157, 0.2)',
+    boxShadow: '0 8px 32px rgba(255, 107, 157, 0.15)',
     width: '100%',
     boxSizing: 'border-box',
+  },
+  inputLabel: {
+    margin: '0 0 20px 0',
+    fontSize: '1rem',
+    color: '#665566',
+    textAlign: 'center',
+    fontWeight: '500',
   },
   inputGroup: {
     display: 'flex',
@@ -400,115 +388,94 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexWrap: 'wrap',
     justifyContent: 'center',
   },
-  inputLabel: {
-    margin: '0 0 16px 0',
-    fontSize: '0.95rem',
-    color: '#aaaacc',
-    textAlign: 'center',
-    wordBreak: 'break-word',
-  },
   input: {
-    flex: '1 1 200px',
-    minWidth: '200px',
-    padding: '14px 18px',
-    fontSize: '0.9rem',
+    flex: '1 1 240px',
+    minWidth: '240px',
+    padding: '16px 20px',
+    fontSize: '0.95rem',
     fontFamily: 'monospace',
-    background: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    borderRadius: '12px',
-    color: '#ffffff',
+    background: '#faf5f7',
+    border: '2px solid #ffd6e7',
+    borderRadius: '14px',
+    color: '#2d2d44',
     outline: 'none',
     transition: 'border-color 0.2s',
     boxSizing: 'border-box',
   },
   button: {
-    padding: '14px 28px',
-    fontSize: '0.95rem',
+    padding: '16px 32px',
+    fontSize: '1rem',
     fontWeight: '700',
-    background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 100%)',
+    background: 'linear-gradient(135deg, #ff6b9d 0%, #ff0055 100%)',
     border: 'none',
-    borderRadius: '12px',
+    borderRadius: '14px',
     color: '#ffffff',
     cursor: 'pointer',
     transition: 'transform 0.2s, box-shadow 0.2s',
     whiteSpace: 'nowrap',
     flexShrink: 0,
-    margin: '0 auto',
-  },
-  hint: {
-    margin: '16px 0 0 0',
-    fontSize: '0.8rem',
-    color: '#666688',
-    textAlign: 'center',
-    wordBreak: 'break-word',
-    lineHeight: 1.6,
-  },
-  code: {
-    background: 'rgba(255, 255, 255, 0.1)',
-    padding: '2px 6px',
-    borderRadius: '4px',
-    fontFamily: 'monospace',
-    fontSize: '0.75rem',
+    boxShadow: '0 4px 16px rgba(255, 107, 157, 0.4)',
   },
   loadingCard: {
     maxWidth: '500px',
     margin: '0 auto',
-    padding: '40px 24px',
-    background: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: '20px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    padding: '48px 24px',
+    background: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: '24px',
+    border: '2px solid rgba(255, 107, 157, 0.2)',
     textAlign: 'center',
   },
   loadingSpinner: {
-    fontSize: '3rem',
+    fontSize: '3.5rem',
     marginBottom: '16px',
     animation: 'bounce 1s infinite',
   },
   loadingText: {
     margin: 0,
-    color: '#aaaacc',
-    fontSize: '1rem',
+    color: '#886677',
+    fontSize: '1.05rem',
   },
   errorCard: {
     maxWidth: '500px',
     margin: '0 auto',
-    padding: '20px 24px',
-    background: 'rgba(255, 0, 85, 0.1)',
-    borderRadius: '16px',
-    border: '1px solid rgba(255, 0, 85, 0.3)',
+    padding: '24px 28px',
+    background: 'rgba(255, 240, 245, 0.95)',
+    borderRadius: '20px',
+    border: '2px solid rgba(255, 107, 157, 0.3)',
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '14px',
     flexWrap: 'wrap',
   },
   errorIcon: {
-    fontSize: '1.5rem',
+    fontSize: '1.6rem',
   },
   errorText: {
     margin: 0,
     flex: '1 1 auto',
-    color: '#ff6b9d',
+    color: '#ff0055',
     fontSize: '0.95rem',
     minWidth: '200px',
   },
   resetButton: {
-    padding: '10px 20px',
-    fontSize: '0.85rem',
+    padding: '12px 24px',
+    fontSize: '0.9rem',
     fontWeight: '600',
-    background: 'rgba(255, 255, 255, 0.1)',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
-    borderRadius: '10px',
-    color: '#ffffff',
+    background: 'rgba(255, 107, 157, 0.15)',
+    border: '2px solid rgba(255, 107, 157, 0.3)',
+    borderRadius: '12px',
+    color: '#ff0055',
     cursor: 'pointer',
     transition: 'background 0.2s',
   },
   profileCard: {
-    maxWidth: '500px',
+    maxWidth: '520px',
     margin: '0 auto 24px',
-    padding: '24px',
-    background: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: '20px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    padding: '28px',
+    background: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: '24px',
+    border: '2px solid rgba(255, 107, 157, 0.2)',
+    boxShadow: '0 8px 32px rgba(255, 107, 157, 0.12)',
     width: '100%',
     boxSizing: 'border-box',
   },
@@ -517,132 +484,125 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '16px',
     marginBottom: '20px',
-    flexWrap: 'nowrap',
+    justifyContent: 'center',
   },
   avatar: {
-    width: '64px',
-    height: '64px',
+    width: '72px',
+    height: '72px',
     borderRadius: '50%',
     objectFit: 'cover',
-    border: '3px solid rgba(255, 0, 85, 0.3)',
     flexShrink: 0,
   },
   avatarPlaceholder: {
-    width: '64px',
-    height: '64px',
+    width: '72px',
+    height: '72px',
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, #ff0055 0%, #ff6b9d 100%)',
+    background: 'linear-gradient(135deg, #ff6b9d 0%, #ff0055 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '1.8rem',
+    fontSize: '2rem',
     fontWeight: 'bold',
     color: '#ffffff',
-    border: '3px solid rgba(255, 255, 255, 0.2)',
     flexShrink: 0,
   },
   profileInfo: {
     flex: 1,
     minWidth: 0,
-  },
-  profileLabel: {
-    fontSize: '0.75rem',
-    color: '#8888aa',
-    marginBottom: '4px',
+    textAlign: 'center',
   },
   profileName: {
-    fontSize: '1.3rem',
+    fontSize: '1.4rem',
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#2d2d44',
     wordBreak: 'break-word',
-  },
-  addressBox: {
-    padding: '14px 18px',
-    background: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: '12px',
-    marginBottom: '16px',
-  },
-  addressLabel: {
-    display: 'block',
-    fontSize: '0.7rem',
-    color: '#666688',
     marginBottom: '6px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
   },
   addressValue: {
-    display: 'block',
-    fontSize: '0.8rem',
+    fontSize: '0.75rem',
     fontFamily: 'monospace',
-    color: '#ff6b9d',
+    color: '#886677',
     wordBreak: 'break-all',
   },
   resetButtonSmall: {
     width: '100%',
-    padding: '12px',
-    fontSize: '0.9rem',
+    padding: '14px',
+    fontSize: '0.95rem',
     fontWeight: '600',
-    background: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    borderRadius: '12px',
-    color: '#aaaacc',
+    background: 'linear-gradient(135deg, #fff5f8 0%, #ffe4ec 100%)',
+    border: '2px solid rgba(255, 107, 157, 0.25)',
+    borderRadius: '14px',
+    color: '#ff6b9d',
     cursor: 'pointer',
     transition: 'background 0.2s',
   },
   birthdayCard: {
-    maxWidth: '500px',
+    maxWidth: '520px',
     margin: '0 auto',
-    padding: '28px 24px',
-    background: 'linear-gradient(135deg, rgba(255, 0, 85, 0.08) 0%, rgba(255, 107, 157, 0.05) 100%)',
-    borderRadius: '20px',
-    border: '1px solid rgba(255, 0, 85, 0.2)',
+    padding: '32px 28px',
+    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 240, 245, 0.9) 100%)',
+    borderRadius: '24px',
+    border: '2px solid rgba(255, 107, 157, 0.25)',
+    boxShadow: '0 8px 32px rgba(255, 107, 157, 0.15)',
     width: '100%',
     boxSizing: 'border-box',
   },
   birthdayHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '12px',
-    marginBottom: '24px',
+    textAlign: 'center',
+    marginBottom: '28px',
   },
-  birthdayIcon: {
-    fontSize: '2rem',
+  birthdayTitleWrapper: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 20px',
+    background: 'linear-gradient(135deg, #fff5f8 0%, #ffe4ec 100%)',
+    borderRadius: '20px',
+    border: '2px solid rgba(255, 107, 157, 0.2)',
+  },
+  birthdayCake: {
+    fontSize: '1.6rem',
   },
   birthdayTitle: {
-    fontSize: '1.4rem',
+    fontSize: '1.2rem',
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#ff6b9d',
+    letterSpacing: '0.02em',
   },
   birthdayItem: {
-    padding: '16px 0',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+    padding: '18px 0',
+    borderBottom: '2px dashed rgba(255, 107, 157, 0.15)',
+    textAlign: 'center',
   },
   birthdayLabel: {
     display: 'block',
-    fontSize: '0.8rem',
-    color: '#8888aa',
+    fontSize: '0.75rem',
+    color: '#886677',
     marginBottom: '8px',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
   },
   birthdayValue: {
     display: 'block',
-    fontSize: '1rem',
-    color: '#ffffff',
-    fontWeight: '500',
+    fontSize: '0.95rem',
+    color: '#2d2d44',
+    fontWeight: '600',
     wordBreak: 'break-word',
   },
   txLink: {
     display: 'block',
-    fontSize: '0.85rem',
+    fontSize: '0.8rem',
     color: '#ff6b9d',
     textDecoration: 'none',
     fontFamily: 'monospace',
     transition: 'color 0.2s',
+    fontWeight: '500',
   },
   footerContainer: {
-    marginTop: '32px',
-    paddingTop: '24px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    marginTop: '48px',
+    paddingTop: '28px',
+    borderTop: '2px dashed rgba(255, 107, 157, 0.2)',
   },
   footer: {
     display: 'flex',
@@ -653,10 +613,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   footerText: {
     fontSize: '0.85rem',
-    color: '#666688',
+    color: '#886677',
   },
   footerHeart: {
-    fontSize: '0.9rem',
+    fontSize: '0.95rem',
   },
   footerEmoji: {
     fontSize: '1.1rem',
@@ -670,31 +630,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#ff6b9d',
     textDecoration: 'none',
     fontSize: '0.85rem',
-    fontWeight: '500',
+    fontWeight: '600',
     transition: 'opacity 0.2s',
   },
   footerSeparator: {
-    color: '#444466',
+    color: '#ccb5c0',
     fontSize: '0.85rem',
   },
   footerX: {
     fontSize: '0.9rem',
     fontFamily: 'system-ui, sans-serif',
-    color: '#ffffff',
-  },
-  connectingCard: {
-    maxWidth: '500px',
-    margin: '0 auto',
-    padding: '40px 24px',
-    background: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: '20px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    textAlign: 'center',
-  },
-  connectingText: {
-    margin: 0,
-    color: '#aaaacc',
-    fontSize: '1rem',
+    color: '#2d2d44',
   },
 };
 
