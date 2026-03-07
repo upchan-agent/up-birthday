@@ -241,9 +241,9 @@ function App() {
         </div>
       )}
 
-      {/* プロフィール表示 */}
-      {profile && address && (
-        <div style={styles.profileCard}>
+      {/* プロフィールと誕生日情報（1 つのカードに統合） */}
+      {profile && birthday && (
+        <div style={styles.resultCard}>
           <div style={styles.profileHeader}>
             {profile.avatarUrl ? (
               <img
@@ -264,15 +264,8 @@ function App() {
             </div>
           </div>
 
-          <button onClick={handleReset} style={styles.resetButtonSmall}>
-            Clear
-          </button>
-        </div>
-      )}
+          <div style={styles.birthdayDivider}></div>
 
-      {/* 誕生日情報 */}
-      {birthday && (
-        <div style={styles.birthdayCard}>
           <div style={styles.birthdayHeader}>
             <p style={styles.birthdaySubtitle}>
               <span style={styles.birthdayCake}>🎂</span> Your Universal Profile was born on ✨
@@ -452,21 +445,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '0.95rem',
     minWidth: '200px',
   },
-  resetButton: {
-    padding: '12px 24px',
-    fontSize: '0.9rem',
-    fontWeight: '600',
-    background: 'rgba(255, 107, 157, 0.15)',
-    border: '2px solid rgba(255, 107, 157, 0.3)',
-    borderRadius: '12px',
-    color: '#ff0055',
-    cursor: 'pointer',
-    transition: 'background 0.2s',
-  },
-  profileCard: {
+  resultCard: {
     maxWidth: '520px',
-    margin: '0 auto 20px',
-    padding: '20px 24px',
+    margin: '0 auto',
+    padding: '24px 28px',
     background: '#ffffff',
     borderRadius: '20px',
     boxShadow: '0 2px 12px rgba(249, 174, 199, 0.15)',
@@ -479,6 +461,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '14px',
     marginBottom: '16px',
     justifyContent: 'center',
+  },
+  birthdayDivider: {
+    height: '1px',
+    background: 'linear-gradient(90deg, transparent 0%, #f7b3c7 50%, transparent 100%)',
+    margin: '16px 0',
   },
   avatar: {
     width: '56px',
@@ -517,30 +504,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#886677',
     wordBreak: 'break-all',
   },
-  resetButtonSmall: {
-    padding: '12px 24px',
-    fontSize: '0.9rem',
-    fontWeight: '700',
-    background: 'linear-gradient(135deg, #f9aec7 0%, #f78fb3 100%)',
-    border: 'none',
-    borderRadius: '12px',
-    color: '#ffffff',
-    cursor: 'pointer',
-    transition: 'transform 0.2s, opacity 0.2s',
-  },
-  birthdayCard: {
-    maxWidth: '520px',
-    margin: '0 auto',
-    padding: '24px 28px',
-    background: '#ffffff',
-    borderRadius: '20px',
-    boxShadow: '0 2px 12px rgba(249, 174, 199, 0.15)',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
   birthdayHeader: {
     textAlign: 'center',
-    marginBottom: '20px',
+    marginBottom: '16px',
   },
   birthdayCake: {
     fontSize: '1.3rem',
