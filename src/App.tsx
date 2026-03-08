@@ -30,6 +30,12 @@ interface BirthdayData {
   local: string;
   txHash: string;
   txUrl: string;
+  age: {
+    years: number;
+    months: number;
+    days: number;
+    elapsedDays: number;
+  };
 }
 
 function App() {
@@ -139,6 +145,29 @@ function App() {
     }
   };
 
+  // Calculate age from birth date
+  function calculateAge(birthDate: Date) {
+    const now = new Date();
+    const birth = birthDate;
+    
+    let years = now.getFullYear() - birth.getFullYear();
+    let months = now.getMonth() - birth.getMonth();
+    let days = now.getDate() - birth.getDate();
+    
+    if (days < 0) {
+      months--;
+      days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    }
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+    
+    const elapsedDays = Math.floor((now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
+    
+    return { years, months, days, elapsedDays };
+  }
+
   const fetchBirthday = async (addr: string) => {
     try {
       const addrRes = await fetch(
@@ -157,6 +186,7 @@ function App() {
       const txData = await txRes.json();
 
       const createdAt = new Date(txData.timestamp);
+      const age = calculateAge(createdAt);
 
       setBirthday({
         timestamp: txData.timestamp,
@@ -164,6 +194,7 @@ function App() {
         local: createdAt.toLocaleString(),
         txHash,
         txUrl: `https://explorer.execution.mainnet.lukso.network/tx/${txHash}`,
+        age,
       });
     } catch (e: any) {
       setError(e.message || 'Unknown error');
@@ -288,6 +319,13 @@ function App() {
           <div style={styles.birthdayItem}>
             <span style={styles.birthdayLabel}>🕐 Local</span>
             <b style={styles.birthdayValue}>{birthday.local}</b>
+          </div>
+
+          <div style={styles.birthdayItem}>
+            <span style={styles.birthdayLabel}>🎂 Age</span>
+            <b style={styles.birthdayValue}>
+              {birthday.age.years} Y {birthday.age.months} M {birthday.age.days} D ( {birthday.age.elapsedDays} days )
+            </b>
           </div>
 
           <div style={styles.birthdayItem}>
