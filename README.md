@@ -67,3 +67,4 @@ UniversalEverything の Grid にミニアプリとして追加すると、自動
 ## ライセンス
 
 MIT
+
