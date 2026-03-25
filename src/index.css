@@ -11,6 +11,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background: #fce8ed;
+  overflow-y: scroll; /* 常にスクロールバー表示でズレ防止 */
 }
 
 #root {
