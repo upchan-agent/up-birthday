@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClientUPProvider } from '@lukso/up-provider';
 import { request } from 'graphql-request';
 
 const GRAPHQL_ENDPOINT = 'https://envio.lukso-mainnet.universal.tech/v1/graphql';
 
+// profile + createdTimestamp を1クエリで取得（Envio は作成タイムスタンプをブロック時刻と一致して保持）
 const GET_PROFILE_QUERY = `
   query GetProfile($address: String!) {
     Profile(where: { id: { _eq: $address } }) {
       id
       name
       fullName
+      createdTimestamp
       profileImages(where: { error: { _is_null: true } }) {
         width
         height
@@ -19,13 +21,22 @@ const GET_PROFILE_QUERY = `
   }
 `;
 
+const EXPLORER_API = 'https://explorer.execution.mainnet.lukso.network/api/v2';
+
 interface ProfileData {
   name: string;
   avatarUrl?: string;
 }
 
+interface EnvioProfile {
+  id: string;
+  name: string | null;
+  fullName: string | null;
+  createdTimestamp: number | null;
+  profileImages: { width: number | null; height: number | null; url: string | null }[] | null;
+}
+
 interface BirthdayData {
-  timestamp: string;
   utc: string;
   local: string;
   txHash: string;
@@ -38,6 +49,8 @@ interface BirthdayData {
   };
 }
 
+const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+
 function App() {
   const [address, setAddress] = useState<string | null>(null);
   const [inputAddress, setInputAddress] = useState('');
@@ -46,51 +59,154 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [avatarBroken, setAvatarBroken] = useState(false);
+
+  // Grid の accountsChanged は購読を1回だけにして、ハンドラ内では ref で最新アドレスを参照する
+  const addressRef = useRef<string | null>(null);
+  addressRef.current = address;
+
+  // Calculate age from birth date
+  function calculateAge(birthDate: Date) {
+    const now = new Date();
+    const birth = birthDate;
+
+    let years = now.getFullYear() - birth.getFullYear();
+    let months = now.getMonth() - birth.getMonth();
+    let days = now.getDate() - birth.getDate();
+
+    if (days < 0) {
+      months--;
+      days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    }
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+
+    const elapsedDays = Math.floor((now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
+
+    return { years, months, days, elapsedDays };
+  }
+
+  // profile(Envio) と birthday(explorer creation tx) を並列で取得し、loading を一括管理
+  const lookup = async (rawAddr: string) => {
+    const addr = rawAddr.toLowerCase();
+    setLoading(true);
+    setError(null);
+    setAvatarBroken(false);
+
+    let profileResult: ProfileData = { name: 'Unknown' };
+    let createdTs: number | null = null;
+
+    try {
+      const data = await request<{ Profile: EnvioProfile[] | null }>(
+        GRAPHQL_ENDPOINT,
+        GET_PROFILE_QUERY,
+        { address: addr }
+      );
+      const profileData = data.Profile?.[0];
+
+      if (profileData) {
+        // 画像の選択：最小サイズ（アイコン用）
+        const images = profileData.profileImages || [];
+        let avatarUrl: string | undefined;
+
+        if (images.length > 0) {
+          const sorted = [...images].sort((a, b) => (a.width || 0) - (b.width || 0));
+          const rawUrl = sorted[0].url;
+
+          // IPFS URL をゲートウェイ URL に変換
+          if (rawUrl?.startsWith('ipfs://')) {
+            avatarUrl = 'https://api.universalprofile.cloud/ipfs/' + rawUrl.replace('ipfs://', '');
+          } else {
+            avatarUrl = rawUrl ?? undefined;
+          }
+        }
+
+        profileResult = {
+          name: profileData.fullName || profileData.name || 'Unknown',
+          avatarUrl,
+        };
+        createdTs = profileData.createdTimestamp ?? null;
+      }
+    } catch (e) {
+      console.error('Profile fetch error:', e);
+    }
+    setProfile(profileResult);
+
+    try {
+      // creation tx hash は explorer が権威ソース（Envio の transactions は作成 tx を保証しない）
+      const addrRes = await fetch(`${EXPLORER_API}/addresses/${addr}`);
+      const addrData = await addrRes.json();
+
+      const txHash = addrData.creation_transaction_hash;
+      if (!txHash) {
+        throw new Error('Not found the creation transaction');
+      }
+
+      // タイムスタンプは Envio の createdTimestamp を優先（秒単位で explorer と一致を検証済み）。
+      // Envio にレコードが無い場合のみ explorer の tx 詳細へフォールバック。
+      let createdAt: Date;
+      if (createdTs != null) {
+        createdAt = new Date(createdTs * 1000);
+      } else {
+        const txRes = await fetch(`${EXPLORER_API}/transactions/${txHash}`);
+        const txData = await txRes.json();
+        createdAt = new Date(txData.timestamp);
+      }
+
+      setBirthday({
+        utc: createdAt.toUTCString(),
+        local: createdAt.toLocaleString(),
+        txHash,
+        txUrl: `https://explorer.execution.mainnet.lukso.network/tx/${txHash}`,
+        age: calculateAge(createdAt),
+      });
+    } catch (e: unknown) {
+      setBirthday(null);
+      setError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // URL パラメータからアドレスを取得
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const addrParam = params.get('address');
-    if (addrParam && addrParam.startsWith('0x')) {
+    if (addrParam && ADDRESS_PATTERN.test(addrParam)) {
       setInputAddress(addrParam);
       setAddress(addrParam.toLowerCase() as `0x${string}`);
-      fetchProfile(addrParam);
-      fetchBirthday(addrParam);
+      lookup(addrParam);
     }
   }, []);
 
-  // Grid 経由の接続を監視
+  // Grid 経由の接続・UP 切替を監視（初回は未設定のみ採用、以降は切替に追従）
   useEffect(() => {
     const provider = createClientUPProvider();
 
-    const accounts = provider.accounts as string[];
-    const contextAccounts = provider.contextAccounts as string[];
+    const adopt = (addr: string) => {
+      const current = addressRef.current;
+      if (current && addr.toLowerCase() === current.toLowerCase()) return;
+      setAddress(addr);
+      // 手動入力中のテキストは上書きしない（空欄または前の自動入力値のときだけ同期）
+      setInputAddress((prev) =>
+        prev === '' || (current && prev.toLowerCase() === current.toLowerCase()) ? addr : prev
+      );
+      lookup(addr);
+    };
 
-    const upAddress = contextAccounts.length > 0 ? contextAccounts[0] : accounts[0];
-
-    if (upAddress && !address) {
-      setInputAddress(upAddress);
-      setAddress(upAddress);
-      fetchProfile(upAddress);
-      fetchBirthday(upAddress);
+    const initialUp = provider.contextAccounts?.[0] ?? provider.accounts?.[0];
+    if (initialUp && !addressRef.current) {
+      adopt(initialUp);
     }
 
     const handleAccountsChanged = (newAccounts: string[]) => {
-      if (newAccounts.length > 0 && !address) {
-        setInputAddress(newAccounts[0]);
-        setAddress(newAccounts[0]);
-        fetchProfile(newAccounts[0]);
-        fetchBirthday(newAccounts[0]);
-      }
+      if (newAccounts.length > 0) adopt(newAccounts[0]);
     };
 
     const handleContextAccountsChanged = (newContextAccounts: string[]) => {
-      if (newContextAccounts.length > 0 && !address) {
-        setInputAddress(newContextAccounts[0]);
-        setAddress(newContextAccounts[0]);
-        fetchProfile(newContextAccounts[0]);
-        fetchBirthday(newContextAccounts[0]);
-      }
+      if (newContextAccounts.length > 0) adopt(newContextAccounts[0]);
     };
 
     provider.on('accountsChanged', handleAccountsChanged);
@@ -100,116 +216,16 @@ function App() {
       provider.removeListener('accountsChanged', handleAccountsChanged);
       provider.removeListener('contextAccountsChanged', handleContextAccountsChanged);
     };
-  }, [address]);
-
-  const fetchProfile = async (addr: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await request(GRAPHQL_ENDPOINT, GET_PROFILE_QUERY, { address: addr.toLowerCase() });
-      
-      const profileData = data.Profile?.[0];
-
-      if (!profileData) {
-        setProfile({ name: 'Unknown' });
-        return;
-      }
-
-      // 画像の選択：最小サイズ（アイコン用）
-      const images = profileData.profileImages || [];
-      let avatarUrl: string | undefined;
-      
-      if (images.length > 0) {
-        const sorted = [...images].sort((a, b) => (a.width || 0) - (b.width || 0));
-        const rawUrl = sorted[0].url;
-        
-        // IPFS URL をゲートウェイ URL に変換
-        if (rawUrl?.startsWith('ipfs://')) {
-          avatarUrl = 'https://api.universalprofile.cloud/ipfs/' + rawUrl.replace('ipfs://', '');
-        } else if (rawUrl?.startsWith('https://') || rawUrl?.startsWith('http://')) {
-          avatarUrl = rawUrl;
-        } else {
-          avatarUrl = rawUrl;
-        }
-      }
-
-      setProfile({
-        name: profileData.fullName || profileData.name || 'Unknown',
-        avatarUrl,
-      });
-    } catch (e: any) {
-      console.error('Profile fetch error:', e);
-      setProfile({ name: 'Unknown' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Calculate age from birth date
-  function calculateAge(birthDate: Date) {
-    const now = new Date();
-    const birth = birthDate;
-    
-    let years = now.getFullYear() - birth.getFullYear();
-    let months = now.getMonth() - birth.getMonth();
-    let days = now.getDate() - birth.getDate();
-    
-    if (days < 0) {
-      months--;
-      days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
-    }
-    if (months < 0) {
-      years--;
-      months += 12;
-    }
-    
-    const elapsedDays = Math.floor((now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
-    
-    return { years, months, days, elapsedDays };
-  }
-
-  const fetchBirthday = async (addr: string) => {
-    try {
-      const addrRes = await fetch(
-        `https://explorer.execution.mainnet.lukso.network/api/v2/addresses/${addr}`
-      );
-      const addrData = await addrRes.json();
-
-      const txHash = addrData.creation_transaction_hash;
-      if (!txHash) {
-        throw new Error('Not found the creation transaction');
-      }
-
-      const txRes = await fetch(
-        `https://explorer.execution.mainnet.lukso.network/api/v2/transactions/${txHash}`
-      );
-      const txData = await txRes.json();
-
-      const createdAt = new Date(txData.timestamp);
-      const age = calculateAge(createdAt);
-
-      setBirthday({
-        timestamp: txData.timestamp,
-        utc: createdAt.toUTCString(),
-        local: createdAt.toLocaleString(),
-        txHash,
-        txUrl: `https://explorer.execution.mainnet.lukso.network/tx/${txHash}`,
-        age,
-      });
-    } catch (e: any) {
-      setError(e.message || 'Unknown error');
-    }
-  };
+  }, []);
 
   const handleCheck = () => {
-    if (!inputAddress.startsWith('0x')) {
-      setError('Please enter a valid LUKSO address (0x...)');
+    const addr = inputAddress.trim();
+    if (!ADDRESS_PATTERN.test(addr)) {
+      setError('Please enter a valid LUKSO address (0x + 40 hex characters)');
       return;
     }
-    const addr = inputAddress.toLowerCase();
-    setAddress(addr);
-    fetchProfile(addr);
-    fetchBirthday(addr);
+    setAddress(addr.toLowerCase());
+    lookup(addr);
   };
 
   const handleReset = () => {
@@ -218,6 +234,7 @@ function App() {
     setProfile(null);
     setBirthday(null);
     setError(null);
+    setAvatarBroken(false);
   };
 
   const handleShare = () => {
@@ -281,17 +298,15 @@ function App() {
       )}
 
       {/* プロフィールと誕生日情報（1 つのカードに統合） */}
-      {profile && birthday && (
+      {profile && birthday && !loading && (
         <div style={styles.resultCard}>
           <div style={styles.profileHeader}>
-            {profile.avatarUrl ? (
+            {profile.avatarUrl && !avatarBroken ? (
               <img
                 src={profile.avatarUrl}
                 alt={profile.name}
                 style={styles.avatar}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
+                onError={() => setAvatarBroken(true)}
               />
             ) : (
               <div style={styles.avatarPlaceholder}>
@@ -335,8 +350,9 @@ function App() {
               target="_blank"
               rel="noopener noreferrer"
               style={styles.txLink}
+              title={birthday.txHash}
             >
-              {birthday.txHash.slice(0, 10)}...{birthday.txHash.slice(-8)}
+              {birthday.txHash.slice(0, 10)}…{birthday.txHash.slice(-8)}
             </a>
           </div>
 
@@ -356,7 +372,10 @@ function App() {
         </div>
       )}
 
-      {/* フッター（常に表示） */}
+      {/* フッターを下端に押し出すスペーサー（旧版の marginTop:32px と同等の最低余白を確保） */}
+      <div style={styles.footerSpacer} aria-hidden="true"></div>
+
+      {/* フッター（常に画面下端に固定） */}
       <div style={styles.footerContainer}>
         <div style={styles.footer}>
           <span style={styles.footerText}>Made with </span>
@@ -378,14 +397,16 @@ function App() {
 // 🆙ちゃんカラー：明るくポップなデザイン
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    minHeight: '100vh',
+    minHeight: '100dvh',
     width: '100%',
-    padding: '32px 16px',
+    padding: '32px 16px 24px',
     fontFamily: 'inherit',
     background: '#fce8ed',
     color: '#333344',
     overflowX: 'hidden',
     boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
   },
   header: {
     textAlign: 'center',
@@ -416,7 +437,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '500',
   },
   inputSection: {
-    maxWidth: '520px',
+    maxWidth: '480px',
     margin: '0 auto 20px',
     padding: '24px 28px',
     background: '#ffffff',
@@ -465,13 +486,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexShrink: 0,
   },
   loadingCard: {
-    maxWidth: '500px',
+    maxWidth: '480px',
     margin: '0 auto 20px',
     padding: '32px 24px',
     background: '#ffffff',
     borderRadius: '20px',
     boxShadow: '0 2px 12px rgba(249, 174, 199, 0.15)',
     textAlign: 'center',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   loadingSpinner: {
     fontSize: '3.5rem',
@@ -484,7 +507,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.05rem',
   },
   errorCard: {
-    maxWidth: '500px',
+    maxWidth: '480px',
     margin: '0 auto 20px',
     padding: '18px 24px',
     background: '#fff5f8',
@@ -494,6 +517,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '12px',
     flexWrap: 'wrap',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   errorIcon: {
     fontSize: '1.6rem',
@@ -505,8 +530,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '0.95rem',
     minWidth: '200px',
   },
+  resetButton: {
+    padding: '8px 16px',
+    fontSize: '0.8rem',
+    fontWeight: '700',
+    background: '#ffffff',
+    border: '1px solid #f78fb3',
+    borderRadius: '10px',
+    color: '#f78fb3',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
   resultCard: {
-    maxWidth: '520px',
+    maxWidth: '480px',
     margin: '0 auto',
     padding: '24px 28px',
     background: '#ffffff',
@@ -517,10 +554,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   profileHeader: {
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: '14px',
+    gap: '10px',
     marginBottom: '16px',
-    justifyContent: 'center',
   },
   birthdayDivider: {
     height: '1px',
@@ -557,12 +594,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '700',
     color: '#886677',
     wordBreak: 'break-word',
-  },
-  addressValue: {
-    fontSize: '0.75rem',
-    fontFamily: '"Quicksand", "Nunito", monospace',
-    color: '#886677',
-    wordBreak: 'break-all',
   },
   birthdayHeader: {
     textAlign: 'center',
@@ -603,7 +634,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   toast: {
     position: 'fixed',
-    bottom: '100px',
+    bottom: 'calc(24px + env(safe-area-inset-bottom))',
     left: '50%',
     transform: 'translateX(-50%)',
     padding: '14px 28px',
@@ -645,9 +676,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontFamily: '"Quicksand", "Nunito", monospace',
     transition: 'color 0.2s',
     fontWeight: '600',
+    wordBreak: 'break-all',
+  },
+  footerSpacer: {
+    flex: 1,
+    minHeight: '32px',
   },
   footerContainer: {
-    marginTop: '32px',
     paddingTop: '20px',
     borderTop: '1px dashed #f7b3c7',
   },
